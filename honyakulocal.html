@@ -73,7 +73,6 @@
         select { flex: 1; max-width: 45%; }
         textarea { width: 100%; height: 40px; resize: none; box-sizing: border-box; }
         
-        /* 話者選択スイッチエリア */
         .speaker-toggle {
             display: flex;
             gap: 10px;
@@ -143,7 +142,7 @@
             padding-bottom: env(safe-area-inset-bottom);
             flex-shrink: 0;
             position: relative;
-            z-index: 100;
+            z-index: 10000; /* デザインの重なりを防ぐ最前面設定 */
         }
         button { 
             flex: 1; 
@@ -243,7 +242,7 @@
     let recognition = null;
     let isRecording = false;
     let isSpeakingNow = false;
-    let activeSpeaker = 1; // 1:言語1(青), 2:言語2(緑)
+    let activeSpeaker = 1; 
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
@@ -267,7 +266,6 @@
         return opt ? opt.textContent : '';
     }
 
-    // 話者UIの更新
     function setSpeaker(num) {
         activeSpeaker = num;
         if (num === 1) {
@@ -277,7 +275,6 @@
             spk1Btn.className = "speaker-btn";
             spk2Btn.className = "speaker-btn active-lang2";
         }
-        // 録音中ならマイクの言語設定を変えるため再起動
         if (isRecording && !isSpeakingNow) {
             startRecognitionLifecycle();
         }
@@ -302,7 +299,6 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         
-        // 選択された話者に合わせてマイクの「言語」を明示的にセット（誤判定を防ぐ）
         const activeLangCode = (activeSpeaker === 1) ? selectLang1.value : selectLang2.value;
         const activeLangName = (activeSpeaker === 1) ? getSelectedName(selectLang1) : getSelectedName(selectLang2);
         
@@ -330,8 +326,6 @@
             }
 
             statusText.textContent = "翻訳中...";
-            
-            // 明示された言語ペアで確実にAPIへ送信
             const translatedText = await executeTranslation(text, getSelectedIso(fromSel), getSelectedIso(toSel));
 
             addChatBubble(text, translatedText, msgClass);
@@ -343,7 +337,6 @@
                 time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
             });
 
-            // 会話をスムーズにするため、発言完了後は自動的に相手側の言語にスイッチ
             activeSpeaker = (activeSpeaker === 1) ? 2 : 1;
             setSpeaker(activeSpeaker);
         };
@@ -412,4 +405,52 @@
         if (!window.speechSynthesis) return;
         const u = new SpeechSynthesisUtterance("");
         u.volume = 0;
-        window.speech
+        window.speechSynthesis.speak(u);
+    }
+
+    // iOSでクリックが弾かれる不具合の原因となっていたpreventDefault()を完全撤去
+    btnStart.addEventListener('click', () => {
+        if (!SpeechRecognition) {
+            alert("音声認識未対応ブラウザです。");
+            return;
+        }
+
+        if (!isRecording) {
+            unlockMobileAudio();
+            isRecording = true;
+            startRecognitionLifecycle();
+            btnStart.textContent = "通訳を停止";
+            btnStart.classList.add('recording');
+        } else {
+            isRecording = false;
+            if(recognition) {
+                recognition.onend = null;
+                try { recognition.stop(); } catch(e){}
+            }
+            btnStart.textContent = "聴き取りスタート";
+            btnStart.classList.remove('recording');
+            statusText.textContent = "マイク停止中";
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) return;
+        let output = "";
+        historyData.forEach((item) => { output += `[${item.time}] ${item.original} -> ${item.translated}\n`; });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
