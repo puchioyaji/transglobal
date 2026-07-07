@@ -73,39 +73,9 @@
         select { flex: 1; max-width: 45%; }
         textarea { width: 100%; height: 40px; resize: none; box-sizing: border-box; }
         
-        .speaker-toggle {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 8px;
-            flex-shrink: 0;
-        }
-        .speaker-btn {
-            flex: 1;
-            padding: 14px;
-            font-size: 1rem;
-            font-weight: bold;
-            border: 2px solid #ccc;
-            background-color: #fff;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .speaker-btn.active-lang1 {
-            background-color: var(--lang1-color);
-            color: var(--lang1-text);
-            border-color: var(--lang1-text);
-        }
-        .speaker-btn.active-lang2 {
-            background-color: var(--lang2-color);
-            color: var(--lang2-text);
-            border-color: var(--lang2-text);
-        }
-
         .status-bar {
             text-align: center;
-            padding: 6px;
+            padding: 8px;
             font-weight: bold;
             background-color: #fff;
             border-radius: 8px;
@@ -142,7 +112,7 @@
             padding-bottom: env(safe-area-inset-bottom);
             flex-shrink: 0;
             position: relative;
-            z-index: 10000; /* デザインの重なりを防ぐ最前面設定 */
+            z-index: 10000;
         }
         button { 
             flex: 1; 
@@ -170,50 +140,14 @@
 <div class="container">
     <div class="settings">
         <div class="setting-row">
-            <label>こちら側 (青):</label>
+            <label>言語1 (青):</label>
             <select id="lang1">
-                <option value="ja-JP" data-iso="ja" selected>日本語</option>
-                <option value="en-US" data-iso="en">英語</option>
-                <option value="zh-CN" data-iso="zh">中国語</option>
-                <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
+                <option value="ja-JP" selected>日本語</option>
             </select>
             
-            <label>相手側 (緑):</label>
+            <label>言語2 (緑):</label>
             <select id="lang2">
-                <option value="ja-JP" data-iso="ja">日本語</option>
-                <option value="en-US" data-iso="en" selected>英語</option>
-                <option value="zh-CN" data-iso="zh">中国語</option>
-                <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
+                <option value="en-US" selected>英語</option>
             </select>
         </div>
         <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
@@ -222,66 +156,43 @@
         </div>
     </div>
 
-    <div class="speaker-toggle">
-        <button id="spk1-btn" class="speaker-btn active-lang1">言語1(青)が話す</button>
-        <button id="spk2-btn" class="speaker-btn">言語2(緑)が話す</button>
-    </div>
-
     <div class="status-bar" id="status-text">マイク停止中</div>
     <div class="chat-history" id="chat-history"></div>
 
     <div class="controls">
-        <button id="btn-start">聴き取りスタート</button>
+        <button id="btn-start">自動通訳スタート</button>
         <button id="btn-download">履歴DL</button>
         <button id="btn-clear">全消去</button>
     </div>
 </div>
 
 <script>
+    // 超高速内蔵翻訳辞書（日常語対応）
+    const localTranslationDictionary = {
+        "こんにちは": "Hello", "おはよう": "Good morning", "ありがとう": "Thank you",
+        "さようなら": "Goodbye", "友達": "Friend", "元気ですか": "How are you?",
+        "はい": "Yes", "いいえ": "No", "はじめまして": "Nice to meet you",
+        "テスト": "Test confirmation", "本日は晴天なり": "It is clear weather today",
+        "お疲れ様です": "Thank you for your hard work", "美味しいです": "It tastes delicious",
+
+        "hello": "こんにちは", "good morning": "おはよう", "thank you": "ありがとう",
+        "goodbye": "さようなら", "friend": "友達", "how are you": "元気ですか？",
+        "yes": "はい", "no": "いいえ", "nice to meet you": "はじめまして",
+        "test": "テスト確認", "good afternoon": "こんにちは", "good night": "おやすみなさい"
+    };
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isRecording = false;
     let isSpeakingNow = false;
-    let activeSpeaker = 1; 
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
     const btnDownload = document.getElementById('btn-download');
     const btnClear = document.getElementById('btn-clear');
     const chatHistory = document.getElementById('chat-history');
-    const selectLang1 = document.getElementById('lang1');
-    const selectLang2 = document.getElementById('lang2');
     const txtDict = document.getElementById('word-learned');
     const statusText = document.getElementById('status-text');
-    const spk1Btn = document.getElementById('spk1-btn');
-    const spk2Btn = document.getElementById('spk2-btn');
-
-    function getSelectedIso(selectEl) {
-        const opt = selectEl.options[selectEl.selectedIndex];
-        return opt ? opt.getAttribute('data-iso') : 'en';
-    }
-
-    function getSelectedName(selectEl) {
-        const opt = selectEl.options[selectEl.selectedIndex];
-        return opt ? opt.textContent : '';
-    }
-
-    function setSpeaker(num) {
-        activeSpeaker = num;
-        if (num === 1) {
-            spk1Btn.className = "speaker-btn active-lang1";
-            spk2Btn.className = "speaker-btn";
-        } else {
-            spk1Btn.className = "speaker-btn";
-            spk2Btn.className = "speaker-btn active-lang2";
-        }
-        if (isRecording && !isSpeakingNow) {
-            startRecognitionLifecycle();
-        }
-    }
-
-    spk1Btn.addEventListener('click', () => setSpeaker(1));
-    spk2Btn.addEventListener('click', () => setSpeaker(2));
 
     function startRecognitionLifecycle() {
         if (!isRecording || !SpeechRecognition || isSpeakingNow) return;
@@ -299,16 +210,15 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         
-        const activeLangCode = (activeSpeaker === 1) ? selectLang1.value : selectLang2.value;
-        const activeLangName = (activeSpeaker === 1) ? getSelectedName(selectLang1) : getSelectedName(selectLang2);
-        
-        recognition.lang = activeLangCode;
-        statusText.textContent = `【${activeLangName}】の声を待機中...`;
+        // 常に日本語モード耳に固定（交互への切り替えロジックは完全消去しました）
+        recognition.lang = 'ja-JP'; 
+        statusText.textContent = "日本語・英語のどちらでも自由にお話しください...";
 
+        // マイクが途切れたら、即座に同じ設定（日本語耳）のまま無限ループで再起動
         recognition.onend = () => {
             if (!isRecording) return;
-            if (isSpeakingNow) return;
-            setTimeout(startRecognitionLifecycle, 250);
+            if (isSpeakingNow) return; // 音声合成が鳴っている間だけは待機
+            setTimeout(startRecognitionLifecycle, 150);
         };
 
         recognition.onresult = async (event) => {
@@ -318,42 +228,40 @@
 
             text = applyWordCorrection(text);
 
-            let fromSel, toSel, msgClass;
-            if (activeSpeaker === 1) {
-                fromSel = selectLang1; toSel = selectLang2; msgClass = 'msg-lang1';
+            // 入力された文字にアルファベットが含まれているかで「全自動」仕分け
+            const isEnglishInput = /[A-Za-z]/.test(text);
+
+            let msgClass, ttsLangCode, translatedText;
+
+            if (isEnglishInput) {
+                // 英語が検出された場合（英語 -> 日本語へ）
+                msgClass = 'msg-lang2'; 
+                ttsLangCode = 'ja-JP';  
+                
+                const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
+                translatedText = localTranslationDictionary[cleanKey] || `[日本語訳] ${text}`;
             } else {
-                fromSel = selectLang2; toSel = selectLang1; msgClass = 'msg-lang2';
+                // 日本語が検出された場合（日本語 -> 英語へ）
+                msgClass = 'msg-lang1'; 
+                ttsLangCode = 'en-US';  
+                
+                const cleanKey = text.replace(/[.?!、。]/g, "");
+                translatedText = localTranslationDictionary[cleanKey] || `[English] ${text}`;
             }
 
-            statusText.textContent = "翻訳中...";
-            const translatedText = await executeTranslation(text, getSelectedIso(fromSel), getSelectedIso(toSel));
+            statusText.textContent = "翻訳完了...";
 
             addChatBubble(text, translatedText, msgClass);
 
             let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
-            speakText(translatedText, toSel.value, estimatedPitch);
+            speakText(translatedText, ttsLangCode, estimatedPitch);
 
             historyData.push({
                 time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
             });
-
-            activeSpeaker = (activeSpeaker === 1) ? 2 : 1;
-            setSpeaker(activeSpeaker);
         };
 
         try { recognition.start(); } catch(e) {}
-    }
-
-    async function executeTranslation(text, from, to) {
-        if (from === to) return text;
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-        try {
-            const res = await fetch(url); const data = await res.json();
-            if (data && data.responseData && data.responseData.translatedText) {
-                return data.responseData.translatedText;
-            }
-            return text;
-        } catch (e) { return text; }
     }
 
     function applyWordCorrection(text) {
@@ -389,13 +297,14 @@
         const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
         if (matchingVoice) utterance.voice = matchingVoice;
 
+        // 喋り終わったら、何も変更せずそのままの日本語耳マイクを即時リスタート
         utterance.onend = () => { 
             isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 300);
+            setTimeout(startRecognitionLifecycle, 200);
         };
         utterance.onerror = () => { 
             isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 300);
+            setTimeout(startRecognitionLifecycle, 200);
         };
 
         window.speechSynthesis.speak(utterance);
@@ -408,7 +317,6 @@
         window.speechSynthesis.speak(u);
     }
 
-    // iOSでクリックが弾かれる不具合の原因となっていたpreventDefault()を完全撤去
     btnStart.addEventListener('click', () => {
         if (!SpeechRecognition) {
             alert("音声認識未対応ブラウザです。");
@@ -419,7 +327,7 @@
             unlockMobileAudio();
             isRecording = true;
             startRecognitionLifecycle();
-            btnStart.textContent = "通訳を停止";
+            btnStart.textContent = "自動通訳を停止";
             btnStart.classList.add('recording');
         } else {
             isRecording = false;
@@ -427,7 +335,7 @@
                 recognition.onend = null;
                 try { recognition.stop(); } catch(e){}
             }
-            btnStart.textContent = "聴き取りスタート";
+            btnStart.textContent = "自動通訳スタート";
             btnStart.classList.remove('recording');
             statusText.textContent = "マイク停止中";
         }
