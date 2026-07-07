@@ -35,14 +35,12 @@
             margin: 0 0 6px 0;
             font-weight: bold;
         }
-        /* ロゴ画像用のスタイル（小さく中央寄せで配置） */
         .header-logo {
             display: block;
-            max-height: 35px; /* スマートフォンで見やすいように高さを制限 */
+            max-height: 35px;
             width: auto;
             margin: 0 auto;
         }
-        
         .container {
             flex: 1;
             display: flex;
@@ -144,48 +142,48 @@
         <div class="setting-row">
             <label>言語1 (青):</label>
             <select id="lang1">
-                <option value="ja-JP" data-iso="ja" selected>日本語</option>
-                <option value="en-US" data-iso="en">英語</option>
-                <option value="zh-CN" data-iso="zh">中国語</option>
-                <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
+                <option value="ja" selected>日本語</option>
+                <option value="en">英語</option>
+                <option value="zh">中国語</option>
+                <option value="ko">韓国語</option>
+                <option value="fr">フランス語</option>
+                <option value="es">スペイン語</option>
+                <option value="de">ドイツ語</option>
+                <option value="it">イタリア語</option>
+                <option value="pt">ポルトガル語</option>
+                <option value="ru">ロシア語</option>
+                <option value="th">タイ語</option>
+                <option value="vi">ベトナム語</option>
+                <option value="id">インドネシア語</option>
+                <option value="ms">マレー語</option>
+                <option value="hi">ヒンディー語</option>
+                <option value="ar">アラビア語</option>
+                <option value="tr">トルコ語</option>
+                <option value="nl">オランダ語</option>
+                <option value="pl">ポーランド語</option>
             </select>
             
             <label>言語2 (緑):</label>
             <select id="lang2">
-                <option value="ja-JP" data-iso="ja">日本語</option>
-                <option value="en-US" data-iso="en" selected>英語</option>
-                <option value="zh-CN" data-iso="zh">中国語</option>
-                <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
+                <option value="ja">日本語</option>
+                <option value="en" selected>英語</option>
+                <option value="zh">中国語</option>
+                <option value="ko">韓国語</option>
+                <option value="fr">フランス語</option>
+                <option value="es">スペイン語</option>
+                <option value="de">ドイツ語</option>
+                <option value="it">イタリア語</option>
+                <option value="pt">ポルトガル語</option>
+                <option value="ru">ロシア語</option>
+                <option value="th">タイ語</option>
+                <option value="vi">ベトナム語</option>
+                <option value="id">インドネシア語</option>
+                <option value="ms">マレー語</option>
+                <option value="hi">ヒンディー語</option>
+                <option value="ar">アラビア語</option>
+                <option value="tr">トルコ語</option>
+                <option value="nl">オランダ語</option>
+                <option value="pl">ポーランド語</option>
             </select>
         </div>
         <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
@@ -209,7 +207,6 @@
     let recognition = null;
     let isRecording = false;
     let isSpeakingNow = false;
-    let currentListeningTarget = 1; 
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
@@ -221,16 +218,12 @@
     const txtDict = document.getElementById('word-learned');
     const statusText = document.getElementById('status-text');
 
-    function getSelectedIso(selectEl) {
-        const opt = selectEl.options[selectEl.selectedIndex];
-        return opt ? opt.getAttribute('data-iso') : 'en';
-    }
-
     function getSelectedName(selectEl) {
         const opt = selectEl.options[selectEl.selectedIndex];
         return opt ? opt.textContent : '';
     }
 
+    // 【安定化】単一マイクライフサイクル。言語は日本語(ja-JP)ベースに固定してフリーズを防ぐ
     function startRecognitionLifecycle() {
         if (!isRecording || !SpeechRecognition || isSpeakingNow) return;
 
@@ -246,18 +239,15 @@
         recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.interimResults = false;
-
-        const activeLangCode = (currentListeningTarget === 1) ? selectLang1.value : selectLang2.value;
-        const activeLangName = (currentListeningTarget === 1) ? getSelectedName(selectLang1) : getSelectedName(selectLang2);
         
-        recognition.lang = activeLangCode;
-        statusText.textContent = `【${activeLangName}】の発言を待記中...`;
+        // 常に日本語耳として起動（英語の発音も文字化できるようにします）
+        recognition.lang = 'ja-JP'; 
+        statusText.textContent = "お話しください（自動判定中...）";
 
         recognition.onend = () => {
             if (!isRecording) return;
             if (isSpeakingNow) return;
-            currentListeningTarget = (currentListeningTarget === 1) ? 2 : 1;
-            setTimeout(startRecognitionLifecycle, 250);
+            setTimeout(startRecognitionLifecycle, 200);
         };
 
         recognition.onresult = async (event) => {
@@ -267,20 +257,34 @@
 
             text = applyWordCorrection(text);
 
-            let fromSel, toSel, msgClass;
-            if (currentListeningTarget === 1) {
-                fromSel = selectLang1; toSel = selectLang2; msgClass = 'msg-lang1';
+            // 話された文字種（アルファベット、あるいはカタカナ英語）から、言語1か言語2かをスマート判定
+            let fromLang, toLang, msgClass, speechTargetLangCode;
+            
+            // 英語・アルファベットのチェック、またはカタカナ混じりの簡易判定
+            const isEnglishInput = /^[A-Za-z0-9\s.,?!'"-]+$/.test(text) || 
+                                   (selectLang1.value === "ja" && /^[ァ-ヴー\s]+$/.test(text) && text.length > 2);
+
+            if (isEnglishInput && selectLang1.value === "ja") {
+                // 英語（言語2）から日本語（言語1）への通訳と判定
+                fromLang = selectLang2.value;
+                toLang = selectLang1.value;
+                msgClass = 'msg-lang2';
+                speechTargetLangCode = 'ja-JP';
             } else {
-                fromSel = selectLang2; toSel = selectLang1; msgClass = 'msg-lang2';
+                // 日本語（言語1）から英語（言語2）への通訳と判定
+                fromLang = selectLang1.value;
+                toLang = selectLang2.value;
+                msgClass = 'msg-lang1';
+                speechTargetLangCode = (selectLang2.value === 'en') ? 'en-US' : selectLang2.value;
             }
 
             statusText.textContent = "翻訳中...";
-            const translatedText = await executeFreeTranslation(text, getSelectedIso(fromSel), getSelectedIso(toSel));
+            const translatedText = await executeFreeTranslation(text, fromLang, toLang);
 
             addChatBubble(text, translatedText, msgClass);
 
             let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
-            speakText(translatedText, toSel.value, estimatedPitch);
+            speakText(translatedText, speechTargetLangCode, estimatedPitch);
 
             historyData.push({
                 time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
@@ -290,8 +294,10 @@
         try { recognition.start(); } catch(e) {}
     }
 
+    // 自動で言語方向を検知・翻訳する高性能API
     async function executeFreeTranslation(text, from, to) {
         if (from === to) return text;
+        // 「langpair=ja|en」のように渡すことで双方向通信します
         const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
         try {
             const res = await fetch(url); const data = await res.json();
@@ -335,7 +341,6 @@
 
         utterance.onend = () => { 
             isSpeakingNow = false; 
-            currentListeningTarget = (currentListeningTarget === 1) ? 2 : 1;
             setTimeout(startRecognitionLifecycle, 300);
         };
         utterance.onerror = () => { 
@@ -364,7 +369,6 @@
         if (!isRecording) {
             unlockMobileAudio();
             isRecording = true;
-            currentListeningTarget = 1; 
             startRecognitionLifecycle();
             btnStart.textContent = "自動通訳を停止";
             btnStart.classList.add('recording');
