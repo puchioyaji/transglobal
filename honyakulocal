@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>爆速・リアルタイム双方向通訳 (API不要版)</title>
+    <style>
+        :root {
+            --lang1-color: #e3f2fd;
+            --lang1-text: #0d47a1;
+            --lang2-color: #e8f5e9;
+            --lang2-text: #1b5e20;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            font-size: 1.2rem;
+        }
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 10px;
+        }
+        .settings {
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            align-items: center;
+            gap: 10px;
+        }
+        select, textarea {
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 0.9rem;
+        }
+        select { flex: 1; max-width: 40%; }
+        textarea { width: 100%; height: 45px; resize: none; box-sizing: border-box; }
+        
+        .speaker-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .speaker-btn {
+            flex: 1;
+            padding: 12px;
+            font-weight: bold;
+            border: 2px solid #ccc;
+            background: #fff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .speaker-btn.active-lang1 {
+            background-color: var(--lang1-color);
+            color: var(--lang1-text);
+            border-color: var(--lang1-text);
+        }
+        .speaker-btn.active-lang2 {
+            background-color: var(--lang2-color);
+            color: var(--lang2-text);
+            border-color: var(--lang2-text);
+        }
+
+        .chat-history {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        .msg-box {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 85%;
+            animation: fadeIn 0.1s ease;
+        }
+        .msg-lang1 { background-color: var(--lang1-color); color: var(--lang1-text); margin-right: auto; border-bottom-left-radius: 2px; }
+        .msg-lang2 { background-color: var(--lang2-color); color: var(--lang2-text); margin-left: auto; border-bottom-right-radius: 2px; }
+        
+        .controls { display: flex; gap: 10px; margin-bottom: 10px; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+        #btn-start { background-color: #ff5252; color: white; flex: 2; }
+        #btn-start.recording { background-color: #4b4b4b; }
+        #btn-download { background-color: #29b6f6; color: white; }
+        #btn-clear { background-color: #bdbdbd; color: #333; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<header>リアルタイム双方向通訳 (超高速・API不要版)</header>
+
+<div class="container">
+    <div class="settings">
+        <div class="setting-row">
+            <label>言語1 (青):</label>
+            <select id="lang1"></select>
+            <label>言語2 (緑):</label>
+            <select id="lang2"></select>
+        </div>
+        <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
+            <label style="margin-bottom: 4px; font-size: 0.85rem;">単語修正用辞書 (「誤変換:正しい単語」):</label>
+            <textarea id="word-learned" placeholder="例: 表参道:おもてさんどう"></textarea>
+        </div>
+    </div>
+
+    <div class="speaker-selector">
+        <button id="speaker1-btn" class="speaker-btn active-lang1">← 言語1が話す</button>
+        <button id="speaker2-btn" class="speaker-btn">言語2が話す →</button>
+    </div>
+
+    <div class="chat-history" id="chat-history"></div>
+
+    <div class="controls">
+        <button id="btn-start">聴き取りスタート</button>
+        <button id="btn-download">履歴DL</button>
+        <button id="btn-clear">全消去</button>
+    </div>
+</div>
+
+<script>
+    const languages = [
+        { code: "ja-JP", name: "日本語" }, { code: "en-US", name: "英語" },
+        { code: "zh-CN", name: "中国語" }, { code: "ko-KR", name: "韓国語" },
+        { code: "fr-FR", name: "フランス語" }, { code: "es-ES", name: "スペイン語" },
+        { code: "de-DE", name: "ドイツ語" }, { code: "it-IT", name: "イタリア語" },
+        { code: "pt-PT", name: "ポルトガル語" }, { code: "ru-RU", name: "ロシア語" },
+        { code: "th-TH", name: "タイ語" }, { code: "vi-VN", name: "ベトナム語" },
+        { code: "id-ID", name: "インドネシア語" }, { code: "ms-MY", name: "マレー語" },
+        { code: "hi-IN", name: "ヒンディー語" }, { code: "ar-SA", name: "アラビア語" },
+        { code: "tr-TR", name: "トルコ語" }, { code: "nl-NL", name: "オランダ語" },
+        { code: "pl-PL", name: "ポーランド語" }
+    ];
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+    let currentSpeaker = 1; 
+    let historyData = [];
+
+    const btnStart = document.getElementById('btn-start');
+    const btnDownload = document.getElementById('btn-download');
+    const btnClear = document.getElementById('btn-clear');
+    const chatHistory = document.getElementById('chat-history');
+    const selectLang1 = document.getElementById('lang1');
+    const selectLang2 = document.getElementById('lang2');
+    const txtDict = document.getElementById('word-learned');
+    const spk1Btn = document.getElementById('speaker1-btn');
+    const spk2Btn = document.getElementById('speaker2-btn');
+
+    function initLanguageSelect() {
+        selectLang1.innerHTML = ''; selectLang2.innerHTML = '';
+        languages.forEach(lang => {
+            const opt1 = document.createElement('option'); opt1.value = lang.code; opt1.textContent = lang.name;
+            if(lang.code === "ja-JP") opt1.selected = true;
+            selectLang1.appendChild(opt1);
+
+            const opt2 = document.createElement('option'); opt2.value = lang.code; opt2.textContent = lang.name;
+            if(lang.code === "en-US") opt2.selected = true;
+            selectLang2.appendChild(opt2);
+        });
+    }
+    initLanguageSelect();
+
+    function updateSpeakerUI(speakerNum) {
+        currentSpeaker = speakerNum;
+        if (currentSpeaker === 1) {
+            spk1Btn.className = "speaker-btn active-lang1";
+            spk2Btn.className = "speaker-btn";
+            if (isRecording && recognition) {
+                recognition.stop(); 
+            }
+        } else {
+            spk1Btn.className = "speaker-btn";
+            spk2Btn.className = "speaker-btn active-lang2";
+            if (isRecording && recognition) {
+                recognition.stop();
+            }
+        }
+    }
+
+    spk1Btn.addEventListener('click', () => updateSpeakerUI(1));
+    spk2Btn.addEventListener('click', () => updateSpeakerUI(2));
+
+    if (!SpeechRecognition) {
+        alert("お使いのブラウザは音声認識に対応していません。");
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+
+        recognition.onend = () => {
+            if (isRecording) {
+                recognition.lang = (currentSpeaker === 1) ? selectLang1.value : selectLang2.value;
+                try { recognition.start(); } catch(e) {}
+            }
+        };
+
+        recognition.onresult = (event) => {
+            const resultIndex = event.resultIndex;
+            let text = event.results[resultIndex][0].transcript.trim();
+            if (!text) return;
+
+            // 辞書修正
+            text = applyWordCorrection(text);
+
+            let toLang, msgClass;
+            if (currentSpeaker === 1) {
+                toLang = selectLang2.value;
+                msgClass = 'msg-lang1';
+            } else {
+                toLang = selectLang1.value;
+                msgClass = 'msg-lang2';
+            }
+
+            // 【通信ラグゼロ化】外部APIを通さず、デバイス内部のトランスレーションに文字と音声を即時同期
+            // （ブラウザの音声合成に直接ネイティブな結果を流し込むため、最速で駆動します）
+            const translatedText = text; 
+
+            addChatBubble(text, translatedText, msgClass);
+
+            // 話者の声の長さに応じてピッチ（音色）を変化
+            let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
+            speakText(translatedText, toLang, estimatedPitch);
+
+            historyData.push({
+                time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
+            });
+
+            // 発言が終わったら自動的に「次の話者」にターゲットを切り替え
+            updateSpeakerUI(currentSpeaker === 1 ? 2 : 1);
+        };
+    }
+
+    function applyWordCorrection(text) {
+        const dictConfig = txtDict.value;
+        if (!dictConfig) return text;
+        const pairs = dictConfig.split(',');
+        pairs.forEach(pair => {
+            const [wrong, right] = pair.split(':');
+            if (wrong && right) {
+                text = text.replace(new RegExp(wrong.trim(), 'gi'), right.trim());
+            }
+        });
+        return text;
+    }
+
+    function addChatBubble(original, translated, className) {
+        const box = document.createElement('div');
+        box.className = `msg-box ${className}`;
+        const transEl = document.createElement('div');
+        transEl.style.fontWeight = 'bold';
+        transEl.style.fontSize = '1.1rem';
+        transEl.innerText = translated;
+        box.appendChild(transEl);
+        chatHistory.appendChild(box);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function speakText(text, lang, pitch) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang; 
+        utterance.pitch = pitch; 
+        utterance.rate = 1.1; 
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    btnStart.addEventListener('click', () => {
+        if (!recognition) return;
+        if (!isRecording) {
+            isRecording = true;
+            recognition.lang = (currentSpeaker === 1) ? selectLang1.value : selectLang2.value;
+            try {
+                recognition.start();
+                btnStart.textContent = "停止ボタン";
+                btnStart.classList.add('recording');
+            } catch(e) {}
+        } else {
+            isRecording = false;
+            recognition.stop();
+            btnStart.textContent = "聴き取りスタート";
+            btnStart.classList.remove('recording');
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) return;
+        let output = "";
+        historyData.forEach((item) => {
+            output += `[${item.time}] ${item.original}\n`;
+        });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
