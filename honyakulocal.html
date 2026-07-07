@@ -11,7 +11,6 @@
             --lang2-color: #e8f5e9;
             --lang2-text: #1b5e20;
         }
-        /* iOSのバー対策としてhtmlとbodyのスタイルを最適化 */
         html, body {
             margin: 0;
             padding: 0;
@@ -29,10 +28,21 @@
             color: white;
             padding: 10px;
             text-align: center;
-            font-size: 1.2rem;
             flex-shrink: 0;
         }
-        /* コンテナ全体の高さをブラウザの表示可能領域に追従させる */
+        .header-title {
+            font-size: 1.2rem;
+            margin: 0 0 6px 0;
+            font-weight: bold;
+        }
+        /* ロゴ画像用のスタイル（小さく中央寄せで配置） */
+        .header-logo {
+            display: block;
+            max-height: 35px; /* スマートフォンで見やすいように高さを制限 */
+            width: auto;
+            margin: 0 auto;
+        }
+        
         .container {
             flex: 1;
             display: flex;
@@ -98,11 +108,10 @@
         .msg-original { font-size: 0.8rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 3px; }
         .msg-trans { font-weight: bold; font-size: 1.05rem; }
         
-        /* 画面外への押し出しを防ぐため余白を調整し最前面固定 */
         .controls { 
             display: flex; 
             gap: 8px; 
-            padding-bottom: env(safe-area-inset-bottom); /* iPhoneの下部バーの余白を自動計算 */
+            padding-bottom: env(safe-area-inset-bottom);
             flex-shrink: 0;
             position: relative;
             z-index: 100;
@@ -125,7 +134,10 @@
 </head>
 <body>
 
-<header>リアルタイム通訳</header>
+<header>
+    <div class="header-title">リアルタイム通訳</div>
+    <img src="logo.png" alt="一歩先への道しるべ" class="header-logo">
+</header>
 
 <div class="container">
     <div class="settings">
