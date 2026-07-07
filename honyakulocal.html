@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リアルタイム双方向翻訳アプリ (完全自動・バイリンガル認識版)</title>
+    <title>リアルタイム双方向翻訳アプリ (全ブラウザ・スマホ完全対応版)</title>
     <style>
         :root {
             --lang1-color: #e3f2fd;
@@ -102,7 +102,7 @@
 </head>
 <body>
 
-<header>リアルタイム通訳 (2言語同時自動待ち受け)</header>
+<header>リアルタイム通訳 (スマホ・Safari完全対応版)</header>
 
 <div class="container">
     <div class="settings">
@@ -144,13 +144,10 @@
     ];
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    // 【解決策】言語1用と言語2用の2つのマイク(認識エンジン)を独立して定義
-    let recLang1 = null;
-    let recLang2 = null;
-    
+    let recognition = null;
     let isRecording = false;
-    let isSpeakingNow = false; // 音声合成が喋っている最中にマイクが誤反応するのを防ぐフラグ
+    let isSpeakingNow = false;
+    let currentListeningTarget = 1; // 1: 言語1を待機中, 2: 言語2を待機中
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
@@ -160,4 +157,223 @@
     const selectLang1 = document.getElementById('lang1');
     const selectLang2 = document.getElementById('lang2');
     const txtDict = document.getElementById('word-learned');
-    const status
+    const statusText = document.getElementById('status-text');
+
+    function initLanguageSelect() {
+        selectLang1.innerHTML = ''; selectLang2.innerHTML = '';
+        languages.forEach(lang => {
+            const opt1 = document.createElement('option'); opt1.value = lang.code; opt1.textContent = lang.name;
+            if(lang.code === "ja-JP") opt1.selected = true;
+            selectLang1.appendChild(opt1);
+
+            const opt2 = document.createElement('option'); opt2.value = lang.code; opt2.textContent = lang.name;
+            if(lang.code === "en-US") opt2.selected = true;
+            selectLang2.appendChild(opt2);
+        });
+    }
+    initLanguageSelect();
+
+    function getIsoCode(langCode) {
+        const found = languages.find(l => l.code === langCode);
+        return found ? found.iso : "en";
+    }
+
+    function getLanguageName(langCode) {
+        const found = languages.find(l => l.code === langCode);
+        return found ? found.name : "";
+    }
+
+    // 単一マイクの初期化
+    function initRecognition() {
+        if (!SpeechRecognition) return;
+        
+        recognition = new SpeechRecognition();
+        recognition.continuous = false; // Safariのバグ回避のため、あえて会話単位で区切る設定にします
+        recognition.interimResults = false;
+
+        // 話し終わり、または無音終了時に「次の言語の耳」に切り替えて高速でマイクを再起動
+        recognition.onend = () => {
+            if (!isRecording) return;
+            
+            if (isSpeakingNow) {
+                // アプリが喋っている間は再起動を少し待ち、終了後にリスタートさせます
+                setTimeout(restartRecognition, 300);
+            } else {
+                // 喋っていなければ、ターゲット言語を反転させてすぐ耳を切り替える（これが高速言語巡回です）
+                currentListeningTarget = (currentListeningTarget === 1) ? 2 : 1;
+                restartRecognition();
+            }
+        };
+
+        recognition.onresult = async (event) => {
+            if (isSpeakingNow) return;
+
+            const resultIndex = event.resultIndex;
+            let text = event.results[resultIndex][0].transcript.trim();
+            if (!text) return;
+
+            text = applyWordCorrection(text);
+
+            let fromLangCode, toLangCode, msgClass;
+
+            // 現在の「耳のモード」に準じて翻訳方向を決定
+            if (currentListeningTarget === 1) {
+                fromLangCode = selectLang1.value;
+                toLangCode = selectLang2.value;
+                msgClass = 'msg-lang1';
+            } else {
+                fromLangCode = selectLang2.value;
+                toLangCode = selectLang1.value;
+                msgClass = 'msg-lang2';
+            }
+
+            const fromIso = getIsoCode(fromLangCode);
+            const toIso = getIsoCode(toLangCode);
+
+            statusText.textContent = "翻訳中...";
+            const translatedText = await executeFreeTranslation(text, fromIso, toIso);
+
+            addChatBubble(text, translatedText, msgClass);
+
+            let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
+            speakText(translatedText, toLangCode, estimatedPitch);
+
+            historyData.push({
+                time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
+            });
+        };
+    }
+
+    function restartRecognition() {
+        if (!isRecording || !recognition || isSpeakingNow) return;
+        
+        // ターゲットに合わせた言語を都度マイクにセット
+        const activeLangCode = (currentListeningTarget === 1) ? selectLang1.value : selectLang2.value;
+        recognition.lang = activeLangCode;
+        
+        statusText.textContent = `【${getLanguageName(activeLangCode)}】の発言を待機中...`;
+        
+        try { recognition.start(); } catch(e) {}
+    }
+
+    async function executeFreeTranslation(text, from, to) {
+        if (from === to) return text;
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data && data.responseData) {
+                return data.responseData.translatedText;
+            }
+            return text;
+        } catch (e) {
+            return text;
+        }
+    }
+
+    function applyWordCorrection(text) {
+        const dictConfig = txtDict.value;
+        if (!dictConfig) return text;
+        const pairs = dictConfig.split(',');
+        pairs.forEach(pair => {
+            const [wrong, right] = pair.split(':');
+            if (wrong && right) {
+                text = text.replace(new RegExp(wrong.trim(), 'gi'), right.trim());
+            }
+        });
+        return text;
+    }
+
+    function addChatBubble(original, translated, className) {
+        const box = document.createElement('div');
+        box.className = `msg-box ${className}`;
+        
+        const origEl = document.createElement('div');
+        origEl.className = 'msg-original';
+        origEl.innerText = original;
+
+        const transEl = document.createElement('div');
+        transEl.className = 'msg-trans';
+        transEl.innerText = translated;
+
+        box.appendChild(origEl);
+        box.appendChild(transEl);
+        chatHistory.appendChild(box);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function speakText(text, lang, pitch) {
+        if (!window.speechSynthesis) return;
+        
+        isSpeakingNow = true;
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang; 
+        utterance.pitch = pitch; 
+        utterance.rate = 1.1; 
+
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+
+        utterance.onend = () => { 
+            isSpeakingNow = false; 
+            // 喋り終わったら即座にマイクの待機状態を復帰させる
+            restartRecognition();
+        };
+        utterance.onerror = () => { 
+            isSpeakingNow = false; 
+            restartRecognition();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    btnStart.addEventListener('click', () => {
+        if (!SpeechRecognition) {
+            alert("お使いのブラウザは音声認識に対応していません。SafariまたはChromeアプリでお試しください。");
+            return;
+        }
+
+        if (!isRecording) {
+            isRecording = true;
+            currentListeningTarget = 1; // 言語1（日本語）からスタート
+            initRecognition();
+            restartRecognition();
+            btnStart.textContent = "自動通訳を停止";
+            btnStart.classList.add('recording');
+        } else {
+            isRecording = false;
+            if(recognition) recognition.stop();
+            btnStart.textContent = "自動通訳スタート";
+            btnStart.classList.remove('recording');
+            statusText.textContent = "マイク停止中";
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) return;
+        let output = "";
+        historyData.forEach((item) => {
+            output += `[${item.time}] 原文: ${item.original} -> 翻訳: ${item.translated}\n`;
+        });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
