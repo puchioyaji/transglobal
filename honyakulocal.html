@@ -167,18 +167,36 @@
 </div>
 
 <script>
-    // 超高速内蔵翻訳辞書（日常語対応）
+    // 超高速内蔵翻訳辞書（カタカナ表記の揺れにも完全対応）
     const localTranslationDictionary = {
-        "こんにちは": "Hello", "おはよう": "Good morning", "ありがとう": "Thank you",
-        "さようなら": "Goodbye", "友達": "Friend", "元気ですか": "How are you?",
-        "はい": "Yes", "いいえ": "No", "はじめまして": "Nice to meet you",
-        "テスト": "Test confirmation", "本日は晴天なり": "It is clear weather today",
-        "お疲れ様です": "Thank you for your hard work", "美味しいです": "It tastes delicious",
+        // 日本語 -> 英語
+        "こんにちは": "Hello", 
+        "おはよう": "Good morning", 
+        "ありがとう": "Thank you",
+        "さようなら": "Goodbye", 
+        "友達": "Friend", 
+        "元気ですか": "How are you?",
+        "はい": "Yes", 
+        "いいえ": "No", 
+        "はじめまして": "Nice to meet you",
+        "テスト": "Test confirmation", 
+        "本日は晴天なり": "It is clear weather today",
+        "お疲れ様です": "Thank you for your hard work", 
+        "美味しいです": "It tastes delicious",
 
-        "hello": "こんにちは", "good morning": "おはよう", "thank you": "ありがとう",
-        "goodbye": "さようなら", "friend": "友達", "how are you": "元気ですか？",
-        "yes": "はい", "no": "いいえ", "nice to meet you": "はじめまして",
-        "test": "テスト確認", "good afternoon": "こんにちは", "good night": "おやすみなさい"
+        // 英語（アルファベット・カタカナ両方対応） -> 日本語
+        "hello": "こんにちは", "ハロー": "こんにちは",
+        "good morning": "おはよう", "グッドモーニング": "おはよう", "グッモーニン": "おはよう",
+        "thank you": "ありがとう", "サンキュー": "ありがとう",
+        "goodbye": "さようなら", "グッバイ": "さようなら",
+        "friend": "友達", "フレンド": "友達",
+        "how are you": "元気ですか？",
+        "yes": "はい", "イエス": "はい",
+        "no": "いいえ", "ノー": "いいえ",
+        "nice to meet you": "はじめまして",
+        "test": "テスト確認", 
+        "good afternoon": "こんにちは", 
+        "good night": "おやすみなさい"
     };
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -210,14 +228,12 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         
-        // 常に日本語モード耳に固定（交互への切り替えロジックは完全消去しました）
         recognition.lang = 'ja-JP'; 
         statusText.textContent = "日本語・英語のどちらでも自由にお話しください...";
 
-        // マイクが途切れたら、即座に同じ設定（日本語耳）のまま無限ループで再起動
         recognition.onend = () => {
             if (!isRecording) return;
-            if (isSpeakingNow) return; // 音声合成が鳴っている間だけは待機
+            if (isSpeakingNow) return;
             setTimeout(startRecognitionLifecycle, 150);
         };
 
@@ -228,25 +244,29 @@
 
             text = applyWordCorrection(text);
 
-            // 入力された文字にアルファベットが含まれているかで「全自動」仕分け
-            const isEnglishInput = /[A-Za-z]/.test(text);
+            // キー検索用に文字を整形（記号をカット）
+            const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
+
+            // 【判定の超強化】アルファベットが含まれているか、
+            // または辞書データ内で「英語から日本語への翻訳（カタカナ英語）」に登録されているかをチェック
+            const isEnglishInput = /[A-Za-z]/.test(text) || 
+                                   (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey));
 
             let msgClass, ttsLangCode, translatedText;
 
             if (isEnglishInput) {
-                // 英語が検出された場合（英語 -> 日本語へ）
-                msgClass = 'msg-lang2'; 
-                ttsLangCode = 'ja-JP';  
+                // 英語（またはカタカナ英語）で話された場合（英語 -> 日本語へ）
+                msgClass = 'msg-lang2'; // 緑色（右側）
+                ttsLangCode = 'ja-JP';  // 翻訳後は日本語のスピーカーで喋る
                 
-                const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
-                translatedText = localTranslationDictionary[cleanKey] || `[日本語訳] ${text}`;
+                // 不要な[English]などのタグは一切つけず、純粋な翻訳を抽出
+                translatedText = localTranslationDictionary[cleanKey] || text;
             } else {
-                // 日本語が検出された場合（日本語 -> 英語へ）
-                msgClass = 'msg-lang1'; 
-                ttsLangCode = 'en-US';  
+                // 日本語で話された場合（日本語 -> 英語へ）
+                msgClass = 'msg-lang1'; // 青色（左側）
+                ttsLangCode = 'en-US';  // 翻訳後は英語のスピーカーで喋る
                 
-                const cleanKey = text.replace(/[.?!、。]/g, "");
-                translatedText = localTranslationDictionary[cleanKey] || `[English] ${text}`;
+                translatedText = localTranslationDictionary[cleanKey] || text;
             }
 
             statusText.textContent = "翻訳完了...";
@@ -297,7 +317,6 @@
         const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
         if (matchingVoice) utterance.voice = matchingVoice;
 
-        // 喋り終わったら、何も変更せずそのままの日本語耳マイクを即時リスタート
         utterance.onend = () => { 
             isSpeakingNow = false; 
             setTimeout(startRecognitionLifecycle, 200);
