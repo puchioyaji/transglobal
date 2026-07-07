@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>爆速・リアルタイム双方向通訳 (API不要版)</title>
+    <title>リアルタイム双方向翻訳アプリ (完全無料・高速版)</title>
     <style>
         :root {
             --lang1-color: #e3f2fd;
@@ -101,7 +101,9 @@
         }
         .msg-lang1 { background-color: var(--lang1-color); color: var(--lang1-text); margin-right: auto; border-bottom-left-radius: 2px; }
         .msg-lang2 { background-color: var(--lang2-color); color: var(--lang2-text); margin-left: auto; border-bottom-right-radius: 2px; }
-        
+        .msg-original { font-size: 0.85rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 3px; }
+        .msg-trans { font-weight: bold; font-size: 1.1rem; }
+
         .controls { display: flex; gap: 10px; margin-bottom: 10px; }
         button { flex: 1; padding: 15px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
         #btn-start { background-color: #ff5252; color: white; flex: 2; }
@@ -114,7 +116,7 @@
 </head>
 <body>
 
-<header>リアルタイム双方向通訳 (超高速・API不要版)</header>
+<header>リアルタイム双方向通訳 (超高速・無料翻訳版)</header>
 
 <div class="container">
     <div class="settings">
@@ -145,17 +147,18 @@
 </div>
 
 <script>
+    // 主要20言語（API連携用に2文字コードマッピング付き）
     const languages = [
-        { code: "ja-JP", name: "日本語" }, { code: "en-US", name: "英語" },
-        { code: "zh-CN", name: "中国語" }, { code: "ko-KR", name: "韓国語" },
-        { code: "fr-FR", name: "フランス語" }, { code: "es-ES", name: "スペイン語" },
-        { code: "de-DE", name: "ドイツ語" }, { code: "it-IT", name: "イタリア語" },
-        { code: "pt-PT", name: "ポルトガル語" }, { code: "ru-RU", name: "ロシア語" },
-        { code: "th-TH", name: "タイ語" }, { code: "vi-VN", name: "ベトナム語" },
-        { code: "id-ID", name: "インドネシア語" }, { code: "ms-MY", name: "マレー語" },
-        { code: "hi-IN", name: "ヒンディー語" }, { code: "ar-SA", name: "アラビア語" },
-        { code: "tr-TR", name: "トルコ語" }, { code: "nl-NL", name: "オランダ語" },
-        { code: "pl-PL", name: "ポーランド語" }
+        { code: "ja-JP", iso: "ja", name: "日本語" }, { code: "en-US", iso: "en", name: "英語" },
+        { code: "zh-CN", iso: "zh", name: "中国語" }, { code: "ko-KR", iso: "ko", name: "韓国語" },
+        { code: "fr-FR", iso: "fr", name: "フランス語" }, { code: "es-ES", iso: "es", name: "スペイン語" },
+        { code: "de-DE", iso: "de", name: "ドイツ語" }, { code: "it-IT", iso: "it", name: "イタリア語" },
+        { code: "pt-PT", iso: "pt", name: "ポルトガル語" }, { code: "ru-RU", iso: "ru", name: "ロシア語" },
+        { code: "th-TH", iso: "th", name: "タイ語" }, { code: "vi-VN", iso: "vi", name: "ベトナム語" },
+        { code: "id-ID", iso: "id", name: "インドネシア語" }, { code: "ms-MY", iso: "ms", name: "マレー語" },
+        { code: "hi-IN", iso: "hi", name: "ヒンディー語" }, { code: "ar-SA", iso: "ar", name: "アラビア語" },
+        { code: "tr-TR", iso: "tr", name: "トルコ語" }, { code: "nl-NL", iso: "nl", name: "オランダ語" },
+        { code: "pl-PL", iso: "pl", name: "ポーランド語" }
     ];
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -188,20 +191,21 @@
     }
     initLanguageSelect();
 
+    function getIsoCode(langCode) {
+        const found = languages.find(l => l.code === langCode);
+        return found ? found.iso : "en";
+    }
+
     function updateSpeakerUI(speakerNum) {
         currentSpeaker = speakerNum;
         if (currentSpeaker === 1) {
             spk1Btn.className = "speaker-btn active-lang1";
             spk2Btn.className = "speaker-btn";
-            if (isRecording && recognition) {
-                recognition.stop(); 
-            }
+            if (isRecording && recognition) { recognition.stop(); }
         } else {
             spk1Btn.className = "speaker-btn";
             spk2Btn.className = "speaker-btn active-lang2";
-            if (isRecording && recognition) {
-                recognition.stop();
-            }
+            if (isRecording && recognition) { recognition.stop(); }
         }
     }
 
@@ -222,7 +226,7 @@
             }
         };
 
-        recognition.onresult = (event) => {
+        recognition.onresult = async (event) => {
             const resultIndex = event.resultIndex;
             let text = event.results[resultIndex][0].transcript.trim();
             if (!text) return;
@@ -230,32 +234,51 @@
             // 辞書修正
             text = applyWordCorrection(text);
 
-            let toLang, msgClass;
+            let fromLangCode, toLangCode, msgClass;
             if (currentSpeaker === 1) {
-                toLang = selectLang2.value;
+                fromLangCode = selectLang1.value;
+                toLangCode = selectLang2.value;
                 msgClass = 'msg-lang1';
             } else {
-                toLang = selectLang1.value;
+                fromLangCode = selectLang2.value;
+                toLangCode = selectLang1.value;
                 msgClass = 'msg-lang2';
             }
 
-            // 【通信ラグゼロ化】外部APIを通さず、デバイス内部のトランスレーションに文字と音声を即時同期
-            // （ブラウザの音声合成に直接ネイティブな結果を流し込むため、最速で駆動します）
-            const translatedText = text; 
+            const fromIso = getIsoCode(fromLangCode);
+            const toIso = getIsoCode(toLangCode);
+
+            // 【超高速＆無料翻訳】公開APIを使い、爆速で翻訳テキストを取得
+            const translatedText = await executeFreeTranslation(text, fromIso, toIso);
 
             addChatBubble(text, translatedText, msgClass);
 
-            // 話者の声の長さに応じてピッチ（音色）を変化
+            // 話者の声の長さに応じてピッチを変化
             let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
-            speakText(translatedText, toLang, estimatedPitch);
+            speakText(translatedText, toLangCode, estimatedPitch);
 
             historyData.push({
                 time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
             });
 
-            // 発言が終わったら自動的に「次の話者」にターゲットを切り替え
+            // 交互に自動切り替え
             updateSpeakerUI(currentSpeaker === 1 ? 2 : 1);
         };
+    }
+
+    // 無料・キー不要の高速翻訳エンジン (MyMemory API 経由)
+    async function executeFreeTranslation(text, from, to) {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data && data.responseData) {
+                return data.responseData.translatedText;
+            }
+            return "[翻訳エラー]";
+        } catch (e) {
+            return "[通信エラー]";
+        }
     }
 
     function applyWordCorrection(text) {
@@ -274,10 +297,16 @@
     function addChatBubble(original, translated, className) {
         const box = document.createElement('div');
         box.className = `msg-box ${className}`;
+        
+        const origEl = document.createElement('div');
+        origEl.className = 'msg-original';
+        origEl.innerText = original;
+
         const transEl = document.createElement('div');
-        transEl.style.fontWeight = 'bold';
-        transEl.style.fontSize = '1.1rem';
+        transEl.className = 'msg-trans';
         transEl.innerText = translated;
+
+        box.appendChild(origEl);
         box.appendChild(transEl);
         chatHistory.appendChild(box);
         chatHistory.scrollTop = chatHistory.scrollHeight;
@@ -318,7 +347,7 @@
         if (historyData.length === 0) return;
         let output = "";
         historyData.forEach((item) => {
-            output += `[${item.time}] ${item.original}\n`;
+            output += `[${item.time}] 原文: ${item.original} -> 翻訳: ${item.translated}\n`;
         });
         const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
