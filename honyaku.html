@@ -280,15 +280,15 @@
         };
     }
 
-    async function translateWithGemini(text, fromLang, toLang) {
+async function translateWithGemini(text, fromLang, toLang) {
         const apiKey = txtApiKey.value.trim();
         if (!apiKey) {
             alert("Gemini APIキーを入力してください。");
             return null;
         }
 
-        // URLを最新のv1規格、かつ安定版指定モデルに変更
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // モデル名を現在確実にサポートされている gemini-2.5-flash に変更
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
         const prompt = `You are a professional real-time translator. Translate from ${fromLang} to ${toLang}. Provide ONLY the direct translation output. Do not include any explanations, introduction, meta-text, quotes, background information, or language tags like "(en-US)". Text to translate:\n${text}`;
 
         try {
