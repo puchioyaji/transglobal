@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リアルタイム双方向翻訳アプリ (20言語対応版)</title>
+    <title>リアルタイム双方向翻訳アプリ</title>
     <style>
         :root {
             --lang1-color: #e3f2fd;
@@ -34,7 +34,6 @@
             overflow: hidden;
             padding: 10px;
         }
-        /* 設定エリア */
         .settings {
             background: white;
             padding: 10px;
@@ -68,7 +67,6 @@
             resize: none;
             box-sizing: border-box;
         }
-        /* 会話履歴エリア */
         .chat-history {
             flex: 1;
             background: white;
@@ -103,7 +101,6 @@
             margin-top: 5px;
             text-align: right;
         }
-        /* コントロールエリア */
         .controls {
             display: flex;
             gap: 10px;
@@ -137,28 +134,290 @@
 </head>
 <body>
 
-<header>多言語リアルタイム通訳 (20言語対応)</header>
+<header>多言語リアルタイム通訳</header>
 
 <div class="container">
     <div class="settings">
         <div class="setting-row">
             <label>Gemini API Key:</label>
-            <input type="text" id="api-key" placeholder="APIキーを入力してください" value="">
+            <input type="text" id="api-key" placeholder="APIキーを入力してください">
         </div>
         <div class="setting-row">
             <label>言語1 (青):</label>
-            <select id="lang1">
-                </select>
+            <select id="lang1"></select>
             <label>言語2 (緑):</label>
-            <select id="lang2">
-                </select>
+            <select id="lang2"></select>
         </div>
         <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
             <label style="margin-bottom: 4px; font-size: 0.85rem;">単語修正用辞書 (「誤変換:正しい単語」をカンマ区切り):</label>
-            <textarea id="word-learned" placeholder="例: 表参道:おもてさんどう, ヴァイオリン:バイオリン"></textarea>
+            <textarea id="word-learned" placeholder="例: 表参道:おもてさんどう"></textarea>
         </div>
     </div>
 
     <div class="chat-history" id="chat-history"></div>
 
-    <div class="
+    <div class="controls">
+        <button id="btn-start">聴き取りスタート</button>
+        <button id="btn-download">履歴DL</button>
+        <button id="btn-clear">全消去</button>
+    </div>
+</div>
+
+<script>
+    const languages = [
+        { code: "ja-JP", name: "日本語" },
+        { code: "en-US", name: "英語" },
+        { code: "zh-CN", name: "中国語 (簡体字)" },
+        { code: "zh-TW", name: "中国語 (繁体字)" },
+        { code: "ko-KR", name: "韓国語" },
+        { code: "fr-FR", name: "フランス語" },
+        { code: "es-ES", name: "スペイン語" },
+        { code: "de-DE", name: "ドイツ語" },
+        { code: "it-IT", name: "イタリア語" },
+        { code: "pt-PT", name: "ポルトガル語" },
+        { code: "ru-RU", name: "ロシア語" },
+        { code: "th-TH", name: "タイ語" },
+        { code: "vi-VN", name: "ベトナム語" },
+        { code: "id-ID", name: "インドネシア語" },
+        { code: "ms-MY", name: "マレー語" },
+        { code: "hi-IN", name: "ヒンディー語" },
+        { code: "ar-SA", name: "アラビア語" },
+        { code: "tr-TR", name: "トルコ語" },
+        { code: "nl-NL", name: "オランダ語" },
+        { code: "pl-PL", name: "ポーランド語" }
+    ];
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+    let historyData = [];
+
+    const btnStart = document.getElementById('btn-start');
+    const btnDownload = document.getElementById('btn-download');
+    const btnClear = document.getElementById('btn-clear');
+    const chatHistory = document.getElementById('chat-history');
+    const selectLang1 = document.getElementById('lang1');
+    const selectLang2 = document.getElementById('lang2');
+    const txtDict = document.getElementById('word-learned');
+    const txtApiKey = document.getElementById('api-key');
+
+    function initLanguageSelect() {
+        if (!selectLang1 || !selectLang2) return;
+        selectLang1.innerHTML = '';
+        selectLang2.innerHTML = '';
+        languages.forEach(lang => {
+            const opt1 = document.createElement('option');
+            opt1.value = lang.code;
+            opt1.textContent = lang.name;
+            if(lang.code === "ja-JP") opt1.selected = true;
+            selectLang1.appendChild(opt1);
+
+            const opt2 = document.createElement('option');
+            opt2.value = lang.code;
+            opt2.textContent = lang.name;
+            if(lang.code === "en-US") opt2.selected = true;
+            selectLang2.appendChild(opt2);
+        });
+    }
+    initLanguageSelect();
+
+    if (!SpeechRecognition) {
+        alert("お使いのブラウザは音声認識に対応していません。ChromeまたはSafari（iOS）をお試しください。");
+    } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = false;
+
+        recognition.onend = () => {
+            if (isRecording) {
+                try { recognition.start(); } catch(e) { console.error(e); }
+            }
+        };
+
+        recognition.onresult = async (event) => {
+            const resultIndex = event.resultIndex;
+            let text = event.results[resultIndex][0].transcript.trim();
+            if (!text) return;
+
+            text = applyWordCorrection(text);
+
+            let currentLang = selectLang1.value;
+            let targetLang = selectLang2.value;
+            let msgClass = 'msg-lang1';
+
+            const hasJapanese = /[\u30a0-\u30ff\u3040-\u309f\u4e00-\u9faf]/.test(text);
+            const hasKorean = /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f]/.test(text);
+            const hasChinese = /[\u4e00-\u9fa5]/.test(text) && !hasJapanese;
+
+            if (selectLang1.value.startsWith('ja')) {
+                if (!hasJapanese && (hasKorean || hasChinese || /^[A-Za-z0-9\s.,?!'"-]+$/.test(text))) {
+                    currentLang = selectLang2.value;
+                    targetLang = selectLang1.value;
+                    msgClass = 'msg-lang2';
+                }
+            } else {
+                if (hasJapanese && selectLang2.value.startsWith('ja')) {
+                    currentLang = selectLang2.value;
+                    targetLang = selectLang1.value;
+                    msgClass = 'msg-lang2';
+                }
+            }
+
+            const translatedText = await translateWithGemini(text, currentLang, targetLang);
+            if (!translatedText) return;
+
+            addChatBubble(text, translatedText, msgClass);
+
+            let estimatedPitch = text.length % 2 === 0 ? 1.2 : 0.8; 
+            speakText(translatedText, targetLang, estimatedPitch);
+
+            historyData.push({
+                time: new Date().toLocaleTimeString(),
+                original: text,
+                translated: translatedText,
+                type: msgClass
+            });
+        };
+    }
+
+    async function translateWithGemini(text, fromLang, toLang) {
+        const apiKey = txtApiKey.value.trim();
+        if (!apiKey) {
+            alert("Gemini APIキーを入力してください。");
+            return null;
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const prompt = `You are a professional real-time translator. Translate from ${fromLang} to ${toLang}. Provide ONLY the direct translation output. Do not include any explanations, introduction, meta-text, quotes, background information, or language tags like "(en-US)". Text to translate:\n${text}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                return `[APIエラー: Status ${response.status}] ${errorText.substring(0, 100)}`;
+            }
+
+            const data = await response.json();
+            if (data.candidates && data.candidates[0].content.parts[0].text) {
+                return data.candidates[0].content.parts[0].text.trim();
+            } else {
+                return `[解析エラー] 翻訳データが含まれていません`;
+            }
+        } catch (error) {
+            return `[通信エラー] サーバーに接続できませんでした`;
+        }
+    }
+
+    function applyWordCorrection(text) {
+        const dictConfig = txtDict.value;
+        if (!dictConfig) return text;
+
+        const pairs = dictConfig.split(',');
+        pairs.forEach(pair => {
+            const [wrong, right] = pair.split(':');
+            if (wrong && right) {
+                const regex = new RegExp(wrong.trim(), 'gi');
+                text = text.replace(regex, right.trim());
+            }
+        });
+        return text;
+    }
+
+    function addChatBubble(original, translated, className) {
+        const box = document.createElement('div');
+        box.className = `msg-box ${className}`;
+        
+        const originalEl = document.createElement('div');
+        originalEl.style.fontSize = '0.9rem';
+        originalEl.style.opacity = '0.8';
+        originalEl.innerText = `発言: ${original}`;
+
+        const transEl = document.createElement('div');
+        transEl.style.fontWeight = 'bold';
+        transEl.style.marginTop = '4px';
+        transEl.innerText = translated;
+
+        const timeEl = document.createElement('div');
+        timeEl.className = 'msg-time';
+        timeEl.innerText = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        box.appendChild(originalEl);
+        box.appendChild(transEl);
+        box.appendChild(timeEl);
+
+        chatHistory.appendChild(box);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function speakText(text, lang, pitch) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.pitch = pitch; 
+        utterance.rate = 1.0; 
+
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    btnStart.addEventListener('click', () => {
+        if (!recognition) return;
+        if (!isRecording) {
+            recognition.lang = selectLang1.value;
+            try {
+                recognition.start();
+                isRecording = true;
+                btnStart.textContent = "聴き取り中... (押して終了)";
+                btnStart.classList.add('recording');
+            } catch(e) { console.error(e); }
+        } else {
+            recognition.stop();
+            isRecording = false;
+            btnStart.textContent = "聴き取りスタート";
+            btnStart.classList.remove('recording');
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) {
+            alert("ダウンロードする会話履歴がありません。");
+            return;
+        }
+        let output = "=== 会話履歴ダウンロード ===\n\n";
+        historyData.forEach((item) => {
+            const speaker = item.type === 'msg-lang1' ? '言語1' : '言語2';
+            output += `[${item.time}] ${speaker}\n原文: ${item.original}\n翻訳: ${item.translated}\n-------------------------\n`;
+        });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `translation-history-${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("すべての会話履歴を消去してもよろしいですか？")) {
+            chatHistory.innerHTML = '';
+            historyData = [];
+        }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
