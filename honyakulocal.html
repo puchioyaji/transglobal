@@ -18,10 +18,12 @@
             height: 100%;
             background-color: #f5f5f5;
             font-family: 'Helvetica Neue', Arial, sans-serif;
+            overflow: hidden; /* 画面全体の無駄なスクロールを禁止 */
         }
         body {
             display: flex;
             flex-direction: column;
+            position: relative;
         }
         header {
             background-color: #333;
@@ -48,6 +50,8 @@
             overflow: hidden;
             padding: 10px;
             box-sizing: border-box;
+            /* 下部固定ボタンと重ならないようにマージンを確保 */
+            margin-bottom: 80px; 
         }
         .settings {
             background: white;
@@ -92,7 +96,6 @@
             overflow-y: auto;
             padding: 12px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 8px;
             -webkit-overflow-scrolling: touch;
         }
         .msg-box {
@@ -106,13 +109,19 @@
         .msg-original { font-size: 0.8rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 3px; }
         .msg-trans { font-weight: bold; font-size: 1.05rem; }
         
+        /* 【重要】どんなスマホでも画面の一番下に「絶対固定」する設定 */
         .controls { 
             display: flex; 
             gap: 8px; 
-            padding-bottom: env(safe-area-inset-bottom);
-            flex-shrink: 0;
-            position: relative;
-            z-index: 10000;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #f5f5f5;
+            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px; /* iPhoneの下部バー余白を自動計算 */
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            z-index: 99999; /* 確実に最前面へ */
+            box-sizing: border-box;
         }
         button { 
             flex: 1; 
@@ -194,16 +203,15 @@
 
     <div class="status-bar" id="status-text">マイク停止中</div>
     <div class="chat-history" id="chat-history"></div>
+</div>
 
-    <div class="controls">
-        <button id="btn-start">自動通訳スタート</button>
-        <button id="btn-download">履歴DL</button>
-        <button id="btn-clear">全消去</button>
-    </div>
+<div class="controls">
+    <button id="btn-start">自動通訳スタート</button>
+    <button id="btn-download">履歴DL</button>
+    <button id="btn-clear">全消去</button>
 </div>
 
 <script>
-    // 主要な挨拶等の簡易高速内蔵辞書（カタカナ判定補助用）
     const localTranslationDictionary = {
         "こんにちは": "Hello", "おはよう": "Good morning", "ありがとう": "Thank you",
         "さようなら": "Goodbye", "元気ですか": "How are you?",
@@ -248,7 +256,6 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         
-        // 常に日本語耳に固定（スマホ側の切り替えバグによるフリーズを徹底防御）
         recognition.lang = 'ja-JP'; 
         statusText.textContent = "自由にお話しください...";
 
@@ -266,7 +273,6 @@
             text = applyWordCorrection(text);
             const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
-            // アルファベットが含まれているか、または内蔵辞書で「英語発音のカタカナ化」と判定されるか
             const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
             const isEnglishInput = /[A-Za-z]/.test(text) || 
                                    (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey)) ||
@@ -274,15 +280,12 @@
 
             let msgClass, ttsLangCode, fromIso, toIso;
 
-            // 言語1が「日本語」の場合を想定した全自動仕分け
             if (isEnglishInput) {
-                // 外国語（言語2）で話された場合 → 言語1（青）へ翻訳
                 msgClass = 'msg-lang2'; 
                 ttsLangCode = selectLang1.value;  
                 fromIso = getSelectedIso(selectLang2);
                 toIso = getSelectedIso(selectLang1);
             } else {
-                // 日本語（言語1）で話された場合 → 言語2（緑）へ翻訳
                 msgClass = 'msg-lang1'; 
                 ttsLangCode = selectLang2.value;  
                 fromIso = getSelectedIso(selectLang1);
@@ -291,7 +294,6 @@
 
             statusText.textContent = "翻訳中...";
             
-            // 高性能オンライン翻訳を安全に呼び出す
             let translatedText = localTranslationDictionary[cleanKey];
             if (!translatedText) {
                 translatedText = await executeSafeTranslation(text, fromIso, toIso);
@@ -348,3 +350,81 @@
         box.appendChild(origEl); box.appendChild(transEl);
         chatHistory.appendChild(box); chatHistory.scrollTop = chatHistory.scrollHeight;
     }
+
+    function speakText(text, lang, pitch) {
+        if (!window.speechSynthesis) return;
+        
+        isSpeakingNow = true;
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang; utterance.pitch = pitch; utterance.rate = 1.1; 
+
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+
+        utterance.onend = () => { 
+            isSpeakingNow = false; 
+            setTimeout(startRecognitionLifecycle, 200);
+        };
+        utterance.onerror = () => { 
+            isSpeakingNow = false; 
+            setTimeout(startRecognitionLifecycle, 200);
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function unlockMobileAudio() {
+        if (!window.speechSynthesis) return;
+        const u = new SpeechSynthesisUtterance("");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+    }
+
+    btnStart.addEventListener('click', () => {
+        if (!SpeechRecognition) {
+            alert("音声認識未対応ブラウザです。");
+            return;
+        }
+
+        if (!isRecording) {
+            unlockMobileAudio();
+            isRecording = true;
+            startRecognitionLifecycle();
+            btnStart.textContent = "自動通訳を停止";
+            btnStart.classList.add('recording');
+        } else {
+            isRecording = false;
+            if(recognition) {
+                recognition.onend = null;
+                try { recognition.stop(); } catch(e){}
+            }
+            btnStart.textContent = "自動通訳スタート";
+            btnStart.classList.remove('recording');
+            statusText.textContent = "マイク停止中";
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) return;
+        let output = "";
+        historyData.forEach((item) => { output += `[${item.time}] ${item.original} -> ${item.translated}\n`; });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
