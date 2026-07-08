@@ -142,17 +142,53 @@
         <div class="setting-row">
             <label>言語1 (青):</label>
             <select id="lang1">
-                <option value="ja" selected>日本語</option>
+                <option value="ja-JP" data-iso="ja" selected>日本語</option>
+                <option value="en-US" data-iso="en">英語</option>
+                <option value="zh-CN" data-iso="zh">中国語</option>
+                <option value="ko-KR" data-iso="ko">韓国語</option>
+                <option value="fr-FR" data-iso="fr">フランス語</option>
+                <option value="es-ES" data-iso="es">スペイン語</option>
+                <option value="de-DE" data-iso="de">ドイツ語</option>
+                <option value="it-IT" data-iso="it">イタリア語</option>
+                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
+                <option value="ru-RU" data-iso="ru">ロシア語</option>
+                <option value="th-TH" data-iso="th">タイ語</option>
+                <option value="vi-VN" data-iso="vi">ベトナム語</option>
+                <option value="id-ID" data-iso="id">インドネシア語</option>
+                <option value="ms-MY" data-iso="ms">マレー語</option>
+                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
+                <option value="ar-SA" data-iso="ar">アラビア語</option>
+                <option value="tr-TR" data-iso="tr">トルコ語</option>
+                <option value="nl-NL" data-iso="nl">オランダ語</option>
+                <option value="pl-PL" data-iso="pl">ポーランド語</option>
             </select>
             
             <label>言語2 (緑):</label>
             <select id="lang2">
-                <option value="en" selected>英語</option>
+                <option value="ja-JP" data-iso="ja">日本語</option>
+                <option value="en-US" data-iso="en" selected>英語</option>
+                <option value="zh-CN" data-iso="zh">中国語</option>
+                <option value="ko-KR" data-iso="ko">韓国語</option>
+                <option value="fr-FR" data-iso="fr">フランス語</option>
+                <option value="es-ES" data-iso="es">スペイン語</option>
+                <option value="de-DE" data-iso="de">ドイツ語</option>
+                <option value="it-IT" data-iso="it">イタリア語</option>
+                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
+                <option value="ru-RU" data-iso="ru">ロシア語</option>
+                <option value="th-TH" data-iso="th">タイ語</option>
+                <option value="vi-VN" data-iso="vi">ベトナム語</option>
+                <option value="id-ID" data-iso="id">インドネシア語</option>
+                <option value="ms-MY" data-iso="ms">マレー語</option>
+                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
+                <option value="ar-SA" data-iso="ar">アラビア語</option>
+                <option value="tr-TR" data-iso="tr">トルコ語</option>
+                <option value="nl-NL" data-iso="nl">オランダ語</option>
+                <option value="pl-PL" data-iso="pl">ポーランド語</option>
             </select>
         </div>
         <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
             <label style="margin-bottom: 4px; font-size: 0.85rem;">単語修正用辞書 (「誤変換:正しい単語」):</label>
-            <textarea id="word-learned" placeholder="例: 表参道:おもてさんどう"></textarea>
+            <textarea id="word-learned" placeholder="例: 表参道:おもてさん道"></textarea>
         </div>
     </div>
 
@@ -167,19 +203,13 @@
 </div>
 
 <script>
+    // 主要な挨拶等の簡易高速内蔵辞書（カタカナ判定補助用）
     const localTranslationDictionary = {
         "こんにちは": "Hello", "おはよう": "Good morning", "ありがとう": "Thank you",
-        "さようなら": "Goodbye", "友達": "Friend", "元気ですか": "How are you?",
-        "はい": "Yes", "いいえ": "No", "はじめまして": "Nice to meet you",
-        "テスト": "Test confirmation", "本日は晴天なり": "It is clear weather today",
-        "お疲れ様です": "Thank you for your hard work", "美味しいです": "It tastes delicious",
-
+        "さようなら": "Goodbye", "元気ですか": "How are you?",
         "hello": "こんにちは", "ハロー": "こんにちは",
         "good morning": "おはよう", "グッドモーニング": "おはよう", "グッモーニン": "おはよう",
-        "thank you": "ありがとう", "サンキュー": "ありがとう",
-        "goodbye": "さようなら", "グッバイ": "さようにら",
-        "friend": "友達",
-        "yes": "はい", "no": "いいえ"
+        "thank you": "ありがとう", "サンキュー": "ありがとう"
     };
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -194,6 +224,13 @@
     const chatHistory = document.getElementById('chat-history');
     const txtDict = document.getElementById('word-learned');
     const statusText = document.getElementById('status-text');
+    const selectLang1 = document.getElementById('lang1');
+    const selectLang2 = document.getElementById('lang2');
+
+    function getSelectedIso(selectEl) {
+        const opt = selectEl.options[selectEl.selectedIndex];
+        return opt ? opt.getAttribute('data-iso') : 'en';
+    }
 
     function startRecognitionLifecycle() {
         if (!isRecording || !SpeechRecognition || isSpeakingNow) return;
@@ -211,8 +248,9 @@
         recognition.continuous = false;
         recognition.interimResults = false;
         
+        // 常に日本語耳に固定（スマホ側の切り替えバグによるフリーズを徹底防御）
         recognition.lang = 'ja-JP'; 
-        statusText.textContent = "日本語・英語のどちらでも自由にお話しください...";
+        statusText.textContent = "自由にお話しください...";
 
         recognition.onend = () => {
             if (!isRecording) return;
@@ -228,38 +266,38 @@
             text = applyWordCorrection(text);
             const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
-            // アルファベットが含まれているか、またはカタカナ英語かを判定
+            // アルファベットが含まれているか、または内蔵辞書で「英語発音のカタカナ化」と判定されるか
             const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
             const isEnglishInput = /[A-Za-z]/.test(text) || 
                                    (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey)) ||
                                    (isKatakanaOnly && (cleanKey.includes("モーニング") || cleanKey.includes("ハロー") || cleanKey.includes("サンキュー")));
 
-            let msgClass, ttsLangCode, fromLang, toLang;
+            let msgClass, ttsLangCode, fromIso, toIso;
 
+            // 言語1が「日本語」の場合を想定した全自動仕分け
             if (isEnglishInput) {
-                msgClass = 'msg-lang2'; // 緑色（右側）
-                ttsLangCode = 'ja-JP';  // 翻訳後は日本語で喋る
-                fromLang = 'en';
-                toLang = 'ja';
+                // 外国語（言語2）で話された場合 → 言語1（青）へ翻訳
+                msgClass = 'msg-lang2'; 
+                ttsLangCode = selectLang1.value;  
+                fromIso = getSelectedIso(selectLang2);
+                toIso = getSelectedIso(selectLang1);
             } else {
-                msgClass = 'msg-lang1'; // 青色（左側）
-                ttsLangCode = 'en-US';  // 翻訳後は英語で喋る
-                fromLang = 'ja';
-                toLang = 'en';
+                // 日本語（言語1）で話された場合 → 言語2（緑）へ翻訳
+                msgClass = 'msg-lang1'; 
+                ttsLangCode = selectLang2.value;  
+                fromIso = getSelectedIso(selectLang1);
+                toIso = getSelectedIso(selectLang2);
             }
 
             statusText.textContent = "翻訳中...";
             
-            // 1. まず内蔵高速辞書をチェック
+            // 高性能オンライン翻訳を安全に呼び出す
             let translatedText = localTranslationDictionary[cleanKey];
-
-            // 2. 辞書にない未知の言葉（「おいしいね」「顔がかゆい」など）はオンライン翻訳を安全に呼び出す
             if (!translatedText) {
-                translatedText = await executeSafeTranslation(text, fromLang, toLang);
+                translatedText = await executeSafeTranslation(text, fromIso, toIso);
             }
 
             statusText.textContent = "翻訳完了...";
-
             addChatBubble(text, translatedText, msgClass);
 
             let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
@@ -273,17 +311,15 @@
         try { recognition.start(); } catch(e) {}
     }
 
-    // エラー（SELECT TWO DISTINCT LANGUAGES）を絶対に起こさない安全な翻訳関数
     async function executeSafeTranslation(text, from, to) {
-        // カタカナ英語（グッドモーニングなど）を日本語に直す場合、APIに「ja|ja」と誤認されないようfromを明示
+        if (from === to) return text;
         const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
         try {
             const res = await fetch(url); 
             const data = await res.json();
             if (data && data.responseData && data.responseData.translatedText) {
-                // エラーテキストが返ってきた場合のセーフティガード
                 if (data.responseData.translatedText.includes("DISTINCT LANGUAGES")) {
-                    return from === 'ja' ? "It tastes good" : "おいしい"; // 代替テキスト
+                    return text; 
                 }
                 return data.responseData.translatedText;
             }
@@ -312,81 +348,3 @@
         box.appendChild(origEl); box.appendChild(transEl);
         chatHistory.appendChild(box); chatHistory.scrollTop = chatHistory.scrollHeight;
     }
-
-    function speakText(text, lang, pitch) {
-        if (!window.speechSynthesis) return;
-        
-        isSpeakingNow = true;
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = lang; utterance.pitch = pitch; utterance.rate = 1.1; 
-
-        const voices = window.speechSynthesis.getVoices();
-        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
-        if (matchingVoice) utterance.voice = matchingVoice;
-
-        utterance.onend = () => { 
-            isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 200);
-        };
-        utterance.onerror = () => { 
-            isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 200);
-        };
-
-        window.speechSynthesis.speak(utterance);
-    }
-
-    function unlockMobileAudio() {
-        if (!window.speechSynthesis) return;
-        const u = new SpeechSynthesisUtterance("");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-    }
-
-    btnStart.addEventListener('click', () => {
-        if (!SpeechRecognition) {
-            alert("音声認識未対応ブラウザです。");
-            return;
-        }
-
-        if (!isRecording) {
-            unlockMobileAudio();
-            isRecording = true;
-            startRecognitionLifecycle();
-            btnStart.textContent = "自動通訳を停止";
-            btnStart.classList.add('recording');
-        } else {
-            isRecording = false;
-            if(recognition) {
-                recognition.onend = null;
-                try { recognition.stop(); } catch(e){}
-            }
-            btnStart.textContent = "自動通訳スタート";
-            btnStart.classList.remove('recording');
-            statusText.textContent = "マイク停止中";
-        }
-    });
-
-    btnDownload.addEventListener('click', () => {
-        if (historyData.length === 0) return;
-        let output = "";
-        historyData.forEach((item) => { output += `[${item.time}] ${item.original} -> ${item.translated}\n`; });
-        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
-    });
-
-    btnClear.addEventListener('click', () => {
-        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
-    });
-
-    if (window.speechSynthesis) {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
-    }
-</script>
-</body>
-</html>
