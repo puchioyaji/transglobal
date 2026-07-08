@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>リアルタイム双方向翻訳アプリ</title>
     <style>
         :root {
@@ -13,6 +13,7 @@
             --lang3-color: #fff3e0;
             --lang3-text: #e65100;
         }
+        /* スマホの画面高さいっぱいにぴったり収める設定 */
         html, body {
             margin: 0;
             padding: 0;
@@ -20,12 +21,11 @@
             height: 100%;
             background-color: #f5f5f5;
             font-family: 'Helvetica Neue', Arial, sans-serif;
-            overflow: hidden;
+            overflow: hidden; /* 画面全体の余計なスクロールを禁止 */
         }
         body {
             display: flex;
             flex-direction: column;
-            position: relative;
         }
         header {
             background-color: #333;
@@ -41,24 +41,24 @@
         }
         .header-logo {
             display: block;
-            max-height: 35px;
+            max-height: 32px;
             width: auto;
             margin: 0 auto;
         }
+        /* 全要素が絶対に外へはみ出さないコンテナ設計 */
         .container {
             flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            padding: 10px;
+            padding: 10px 10px 0 10px;
             box-sizing: border-box;
-            margin-bottom: 80px; 
         }
         .settings {
             background: white;
             padding: 10px;
             border-radius: 8px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             flex-shrink: 0;
         }
@@ -67,7 +67,7 @@
             justify-content: space-between;
             margin-bottom: 6px;
             align-items: center;
-            gap: 10px;
+            gap: 6px;
         }
         select, textarea {
             padding: 6px;
@@ -76,15 +76,15 @@
             font-size: 0.85rem;
         }
         select { flex: 1; max-width: 28%; }
-        textarea { width: 100%; height: 40px; resize: none; box-sizing: border-box; }
+        textarea { width: 100%; height: 35px; resize: none; box-sizing: border-box; }
         
         .status-bar {
             text-align: center;
-            padding: 8px;
+            padding: 6px;
             font-weight: bold;
             background-color: #fff;
             border-radius: 8px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             border: 1px solid #ddd;
             font-size: 0.85rem;
             color: #555;
@@ -97,6 +97,7 @@
             overflow-y: auto;
             padding: 12px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 80px; /* 下部ボタンエリアと絶対に被らないためのスペース */
             -webkit-overflow-scrolling: touch;
         }
         .msg-box {
@@ -111,29 +112,30 @@
         .msg-original { font-size: 0.8rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 3px; }
         .msg-trans { font-weight: bold; font-size: 1.05rem; }
         
-        /* 講師モード用：文字を大画面に巨大表示するエリア */
         .lecture-display {
-            display: none; /* 通常時は非表示 */
+            display: none;
             flex: 1;
             background: #222;
             color: #fff;
             border-radius: 8px;
-            padding: 20px;
+            padding: 15px;
             box-sizing: border-box;
             overflow-y: auto;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px;
             justify-content: center;
+            margin-bottom: 80px; /* 被り防止 */
         }
         .lecture-block {
             border-left: 5px solid #2196f3;
-            padding-left: 15px;
+            padding-left: 12px;
         }
         .lecture-block.lang2 { border-color: #4caf50; }
         .lecture-block.lang3 { border-color: #ff9800; }
-        .lecture-label { font-size: 1rem; opacity: 0.5; margin-bottom: 5px; }
-        .lecture-text { font-size: 2.2rem; font-weight: bold; word-break: break-word; line-height: 1.3; }
+        .lecture-label { font-size: 0.9rem; opacity: 0.5; margin-bottom: 4px; }
+        .lecture-text { font-size: 2rem; font-weight: bold; word-break: break-word; line-height: 1.3; }
 
+        /* 【重要】画面下部に100%固定し、他のレイアウトの裏に回り込ませない設定 */
         .controls { 
             display: flex; 
             gap: 6px; 
@@ -142,14 +144,14 @@
             left: 0;
             right: 0;
             background-color: #f5f5f5;
-            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-            z-index: 99999;
+            padding: 10px 10px calc(12px + env(safe-area-inset-bottom)) 10px; /* iPhone下部セーフエリア考慮 */
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.08);
+            z-index: 99999; /* 確実に最前面で指のタッチを有効化 */
             box-sizing: border-box;
         }
         button { 
             flex: 1; 
-            padding: 14px 6px; 
+            padding: 14px 4px; 
             border: none; 
             border-radius: 8px; 
             font-size: 0.85rem; 
@@ -157,13 +159,12 @@
             cursor: pointer; 
             -webkit-tap-highlight-color: transparent;
         }
-        #btn-start { background-color: #2196f3; color: white; flex: 1.5; }
+        #btn-start { background-color: #2196f3; color: white; flex: 1.4; }
         #btn-start.recording { background-color: #ff5252; }
-        /* 講師モード切り替え用の黄色い特別なボタン */
         #btn-lecture { background-color: #607d8b; color: white; flex: 1.2; }
         #btn-lecture.active { background-color: #ff9800; color: #fff; }
-        #btn-download { background-color: #00bcd4; color: white; flex: 0.8; }
-        #btn-clear { background-color: #bdbdbd; color: #333; flex: 0.8; }
+        #btn-download { background-color: #00bcd4; color: white; flex: 0.7; }
+        #btn-clear { background-color: #bdbdbd; color: #333; flex: 0.7; }
     </style>
 </head>
 <body>
@@ -244,7 +245,7 @@
     let recognition = null;
     let isRecording = false;
     let isSpeakingNow = false;
-    let isLectureMode = false; // 講師モード管理フラグ
+    let isLectureMode = false; 
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
@@ -259,7 +260,6 @@
     const selectLang2 = document.getElementById('lang2');
     const selectLang3 = document.getElementById('lang3');
 
-    // 講師モード表示用の各パーツ
     const outLang1 = document.getElementById('text-output-lang1');
     const outLang2 = document.getElementById('text-output-lang2');
     const outLang3 = document.getElementById('text-output-lang3');
@@ -277,7 +277,6 @@
         return opt ? opt.textContent : '';
     }
 
-    // 講師モードボタンの押下イベント
     btnLecture.addEventListener('click', () => {
         isLectureMode = !isLectureMode;
         if (isLectureMode) {
@@ -329,31 +328,139 @@
             text = applyWordCorrection(text);
             const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
-            // 講師モードがONの場合
             if (isLectureMode) {
                 statusText.textContent = "同時翻訳中...";
                 
-                // ラベル名を現在の選択言語名にリアルタイム反映
                 lblLang1.textContent = `${getSelectedName(selectLang1)} (原文)`;
                 lblLang2.textContent = `${getSelectedName(selectLang2)} (訳文)`;
                 lblLang3.textContent = `${getSelectedName(selectLang3)} (訳文)`;
 
-                // 言語2と言語3へ同時にリクエスト
                 const trans2 = await executeSafeTranslation(text, getSelectedIso(selectLang1), getSelectedIso(selectLang2));
                 const trans3 = await executeSafeTranslation(text, getSelectedIso(selectLang1), getSelectedIso(selectLang3));
 
-                // 大画面に巨大文字を即時描画
                 outLang1.textContent = text;
                 outLang2.textContent = trans2;
                 outLang3.textContent = trans3;
 
                 statusText.textContent = "表示完了";
 
-                // 音声発話（speakText）はスキップしてマイクを即時リスタート
                 historyData.push({ time: new Date().toLocaleTimeString(), original: `[講師] ${text}`, translated: `② ${trans2} | ③ ${trans3}`, type: 'msg-lang1' });
                 setTimeout(startRecognitionLifecycle, 200);
 
             } else {
-                // 通常モード（従来の全自動双方向通訳）
                 const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
-                const isEnglishInput
+                const isEnglishInput = /[A-Za-z]/.test(text) || 
+                                       (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey)) ||
+                                       (isKatakanaOnly && (cleanKey.includes("モーニング") || cleanKey.includes("ハロー") || cleanKey.includes("サンキュー")));
+
+                let msgClass, ttsLangCode, fromIso, toIso;
+
+                if (isEnglishInput) {
+                    msgClass = 'msg-lang2'; ttsLangCode = selectLang1.value; fromIso = getSelectedIso(selectLang2); toIso = getSelectedIso(selectLang1);
+                } else {
+                    msgClass = 'msg-lang1'; ttsLangCode = selectLang2.value; fromIso = getSelectedIso(selectLang1); toIso = getSelectedIso(selectLang2);
+                }
+
+                statusText.textContent = "翻訳中...";
+                let translatedText = localTranslationDictionary[cleanKey] || await executeSafeTranslation(text, fromIso, toIso);
+
+                statusText.textContent = "翻訳完了...";
+                addChatBubble(text, translatedText, msgClass);
+
+                let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
+                speakText(translatedText, ttsLangCode, estimatedPitch);
+
+                historyData.push({ time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass });
+            }
+        };
+
+        try { recognition.start(); } catch(e) {}
+    }
+
+    async function executeSafeTranslation(text, from, to) {
+        if (from === to) return text;
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+        try {
+            const res = await fetch(url); const data = await res.json();
+            if (data && data.responseData && data.responseData.translatedText) {
+                return data.responseData.translatedText;
+            }
+            return text; 
+        } catch (e) { return text; }
+    }
+
+    function applyWordCorrection(text) {
+        const dictConfig = txtDict.value;
+        if (!dictConfig) return text;
+        const pairs = dictConfig.split(',');
+        pairs.forEach(pair => {
+            const [wrong, right] = pair.split(':');
+            if (wrong && right) text = text.replace(new RegExp(wrong.trim(), 'gi'), right.trim());
+        });
+        return text;
+    }
+
+    function addChatBubble(original, translated, className) {
+        const box = document.createElement('div');
+        box.className = `msg-box ${className}`;
+        const origEl = document.createElement('div'); origEl.className = 'msg-original'; origEl.innerText = original;
+        const transEl = document.createElement('div'); transEl.className = 'msg-trans'; transEl.innerText = translated;
+        box.appendChild(origEl); box.appendChild(transEl);
+        chatHistory.appendChild(box); chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function speakText(text, lang, pitch) {
+        if (!window.speechSynthesis || isLectureMode) return; 
+        
+        isSpeakingNow = true;
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang; utterance.pitch = pitch; utterance.rate = 1.1; 
+
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+
+        utterance.onend = () => { isSpeakingNow = false; setTimeout(startRecognitionLifecycle, 200); };
+        utterance.onerror = () => { isSpeakingNow = false; setTimeout(startRecognitionLifecycle, 200); };
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function unlockMobileAudio() {
+        if (!window.speechSynthesis) return;
+        const u = new SpeechSynthesisUtterance("");
+        u.volume = 0; window.speechSynthesis.speak(u);
+    }
+
+    btnStart.addEventListener('click', () => {
+        if (!SpeechRecognition) { alert("音声認識未対応ブラウザです。"); return; }
+        if (!isRecording) {
+            unlockMobileAudio(); isRecording = true; startRecognitionLifecycle();
+            btnStart.textContent = "自動通訳を停止"; btnStart.classList.add('recording');
+        } else {
+            isRecording = false; if(recognition) { recognition.onend = null; try { recognition.stop(); } catch(e){} }
+            btnStart.textContent = "自動通訳スタート"; btnStart.classList.remove('recording'); statusText.textContent = "マイク停止中";
+        }
+    });
+
+    btnDownload.addEventListener('click', () => {
+        if (historyData.length === 0) return;
+        let output = "";
+        historyData.forEach((item) => { output += `[${item.time}] ${item.original} -> ${item.translated}\n`; });
+        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+    });
+
+    btnClear.addEventListener('click', () => {
+        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; outLang1.textContent="待機中..."; outLang2.textContent="---"; outLang3.textContent="---"; }
+    });
+
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
+</script>
+</body>
+</html>
