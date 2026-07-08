@@ -10,6 +10,8 @@
             --lang1-text: #0d47a1;
             --lang2-color: #e8f5e9;
             --lang2-text: #1b5e20;
+            --lang3-color: #fff3e0;
+            --lang3-text: #e65100;
         }
         html, body {
             margin: 0;
@@ -18,7 +20,7 @@
             height: 100%;
             background-color: #f5f5f5;
             font-family: 'Helvetica Neue', Arial, sans-serif;
-            overflow: hidden; /* 画面全体の無駄なスクロールを禁止 */
+            overflow: hidden;
         }
         body {
             display: flex;
@@ -50,7 +52,6 @@
             overflow: hidden;
             padding: 10px;
             box-sizing: border-box;
-            /* 下部固定ボタンと重ならないようにマージンを確保 */
             margin-bottom: 80px; 
         }
         .settings {
@@ -72,9 +73,9 @@
             padding: 6px;
             border-radius: 4px;
             border: 1px solid #ccc;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
-        select { flex: 1; max-width: 45%; }
+        select { flex: 1; max-width: 28%; }
         textarea { width: 100%; height: 40px; resize: none; box-sizing: border-box; }
         
         .status-bar {
@@ -106,37 +107,63 @@
         }
         .msg-lang1 { background-color: var(--lang1-color); color: var(--lang1-text); margin-right: auto; border-bottom-left-radius: 2px; }
         .msg-lang2 { background-color: var(--lang2-color); color: var(--lang2-text); margin-left: auto; border-bottom-right-radius: 2px; }
+        .msg-lang3 { background-color: var(--lang3-color); color: var(--lang3-text); margin-left: auto; border-bottom-right-radius: 2px; }
         .msg-original { font-size: 0.8rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.1); padding-bottom: 3px; margin-bottom: 3px; }
         .msg-trans { font-weight: bold; font-size: 1.05rem; }
         
-        /* 【重要】どんなスマホでも画面の一番下に「絶対固定」する設定 */
+        /* 講師モード用：文字を大画面に巨大表示するエリア */
+        .lecture-display {
+            display: none; /* 通常時は非表示 */
+            flex: 1;
+            background: #222;
+            color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            flex-direction: column;
+            gap: 20px;
+            justify-content: center;
+        }
+        .lecture-block {
+            border-left: 5px solid #2196f3;
+            padding-left: 15px;
+        }
+        .lecture-block.lang2 { border-color: #4caf50; }
+        .lecture-block.lang3 { border-color: #ff9800; }
+        .lecture-label { font-size: 1rem; opacity: 0.5; margin-bottom: 5px; }
+        .lecture-text { font-size: 2.2rem; font-weight: bold; word-break: break-word; line-height: 1.3; }
+
         .controls { 
             display: flex; 
-            gap: 8px; 
+            gap: 6px; 
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background-color: #f5f5f5;
-            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px; /* iPhoneの下部バー余白を自動計算 */
+            padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-            z-index: 99999; /* 確実に最前面へ */
+            z-index: 99999;
             box-sizing: border-box;
         }
         button { 
             flex: 1; 
-            padding: 14px 10px; 
+            padding: 14px 6px; 
             border: none; 
             border-radius: 8px; 
-            font-size: 0.95rem; 
+            font-size: 0.85rem; 
             font-weight: bold; 
             cursor: pointer; 
             -webkit-tap-highlight-color: transparent;
         }
-        #btn-start { background-color: #2196f3; color: white; flex: 2; }
+        #btn-start { background-color: #2196f3; color: white; flex: 1.5; }
         #btn-start.recording { background-color: #ff5252; }
-        #btn-download { background-color: #00bcd4; color: white; }
-        #btn-clear { background-color: #bdbdbd; color: #333; }
+        /* 講師モード切り替え用の黄色い特別なボタン */
+        #btn-lecture { background-color: #607d8b; color: white; flex: 1.2; }
+        #btn-lecture.active { background-color: #ff9800; color: #fff; }
+        #btn-download { background-color: #00bcd4; color: white; flex: 0.8; }
+        #btn-clear { background-color: #bdbdbd; color: #333; flex: 0.8; }
     </style>
 </head>
 <body>
@@ -149,64 +176,59 @@
 <div class="container">
     <div class="settings">
         <div class="setting-row">
-            <label>言語1 (青):</label>
+            <label>青1:</label>
             <select id="lang1">
                 <option value="ja-JP" data-iso="ja" selected>日本語</option>
                 <option value="en-US" data-iso="en">英語</option>
                 <option value="zh-CN" data-iso="zh">中国語</option>
                 <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
             </select>
             
-            <label>言語2 (緑):</label>
+            <label>緑2:</label>
             <select id="lang2">
                 <option value="ja-JP" data-iso="ja">日本語</option>
                 <option value="en-US" data-iso="en" selected>英語</option>
                 <option value="zh-CN" data-iso="zh">中国語</option>
                 <option value="ko-KR" data-iso="ko">韓国語</option>
-                <option value="fr-FR" data-iso="fr">フランス語</option>
-                <option value="es-ES" data-iso="es">スペイン語</option>
-                <option value="de-DE" data-iso="de">ドイツ語</option>
-                <option value="it-IT" data-iso="it">イタリア語</option>
-                <option value="pt-PT" data-iso="pt">ポルトガル語</option>
-                <option value="ru-RU" data-iso="ru">ロシア語</option>
-                <option value="th-TH" data-iso="th">タイ語</option>
-                <option value="vi-VN" data-iso="vi">ベトナム語</option>
-                <option value="id-ID" data-iso="id">インドネシア語</option>
-                <option value="ms-MY" data-iso="ms">マレー語</option>
-                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
-                <option value="ar-SA" data-iso="ar">アラビア語</option>
-                <option value="tr-TR" data-iso="tr">トルコ語</option>
-                <option value="nl-NL" data-iso="nl">オランダ語</option>
-                <option value="pl-PL" data-iso="pl">ポーランド語</option>
+            </select>
+
+            <label>橙3:</label>
+            <select id="lang3">
+                <option value="ja-JP" data-iso="ja">日本語</option>
+                <option value="en-US" data-iso="en">英語</option>
+                <option value="zh-CN" data-iso="zh" selected>中国語</option>
+                <option value="ko-KR" data-iso="ko">韓国語</option>
             </select>
         </div>
         <div class="setting-row" style="flex-direction: column; align-items: flex-start;">
-            <label style="margin-bottom: 4px; font-size: 0.85rem;">単語修正用辞書 (「誤変換:正しい単語」):</label>
+            <label style="margin-bottom: 4px; font-size: 0.8rem;">単語修正用辞書 (「誤変換:正しい単語」):</label>
             <textarea id="word-learned" placeholder="例: 表参道:おもてさん道"></textarea>
         </div>
     </div>
 
     <div class="status-bar" id="status-text">マイク停止中</div>
+    
     <div class="chat-history" id="chat-history"></div>
+
+    <div class="lecture-display" id="lecture-display">
+        <div class="lecture-block lang1">
+            <div class="lecture-label" id="lbl-output-lang1">言語1 (原文)</div>
+            <div class="lecture-text" id="text-output-lang1">待機中...</div>
+        </div>
+        <div class="lecture-block lang2">
+            <div class="lecture-label" id="lbl-output-lang2">言語2 (訳文)</div>
+            <div class="lecture-text" id="text-output-lang2">---</div>
+        </div>
+        <div class="lecture-block lang3">
+            <div class="lecture-label" id="lbl-output-lang3">言語3 (訳文)</div>
+            <div class="lecture-text" id="text-output-lang3">---</div>
+        </div>
+    </div>
 </div>
 
 <div class="controls">
     <button id="btn-start">自動通訳スタート</button>
+    <button id="btn-lecture">講師モード</button>
     <button id="btn-download">履歴DL</button>
     <button id="btn-clear">全消去</button>
 </div>
@@ -214,31 +236,65 @@
 <script>
     const localTranslationDictionary = {
         "こんにちは": "Hello", "おはよう": "Good morning", "ありがとう": "Thank you",
-        "さようなら": "Goodbye", "元気ですか": "How are you?",
-        "hello": "こんにちは", "ハロー": "こんにちは",
-        "good morning": "おはよう", "グッドモーニング": "おはよう", "グッモーニン": "おはよう",
-        "thank you": "ありがとう", "サンキュー": "ありがとう"
+        "さようなら": "Goodbye", "hello": "こんにちは", "ハロー": "こんにちは",
+        "good morning": "おはよう", "グッドモーニング": "おはよう"
     };
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isRecording = false;
     let isSpeakingNow = false;
+    let isLectureMode = false; // 講師モード管理フラグ
     let historyData = [];
 
     const btnStart = document.getElementById('btn-start');
+    const btnLecture = document.getElementById('btn-lecture');
     const btnDownload = document.getElementById('btn-download');
     const btnClear = document.getElementById('btn-clear');
     const chatHistory = document.getElementById('chat-history');
+    const lectureDisplay = document.getElementById('lecture-display');
     const txtDict = document.getElementById('word-learned');
     const statusText = document.getElementById('status-text');
     const selectLang1 = document.getElementById('lang1');
     const selectLang2 = document.getElementById('lang2');
+    const selectLang3 = document.getElementById('lang3');
+
+    // 講師モード表示用の各パーツ
+    const outLang1 = document.getElementById('text-output-lang1');
+    const outLang2 = document.getElementById('text-output-lang2');
+    const outLang3 = document.getElementById('text-output-lang3');
+    const lblLang1 = document.getElementById('lbl-output-lang1');
+    const lblLang2 = document.getElementById('lbl-output-lang2');
+    const lblLang3 = document.getElementById('lbl-output-lang3');
 
     function getSelectedIso(selectEl) {
         const opt = selectEl.options[selectEl.selectedIndex];
         return opt ? opt.getAttribute('data-iso') : 'en';
     }
+
+    function getSelectedName(selectEl) {
+        const opt = selectEl.options[selectEl.selectedIndex];
+        return opt ? opt.textContent : '';
+    }
+
+    // 講師モードボタンの押下イベント
+    btnLecture.addEventListener('click', () => {
+        isLectureMode = !isLectureMode;
+        if (isLectureMode) {
+            btnLecture.classList.add('active');
+            chatHistory.style.display = 'none';
+            lectureDisplay.style.display = 'flex';
+            statusText.style.backgroundColor = '#ff9800';
+            statusText.style.color = '#fff';
+            if(window.speechSynthesis) window.speechSynthesis.cancel();
+        } else {
+            btnLecture.classList.remove('active');
+            chatHistory.style.display = 'block';
+            lectureDisplay.style.display = 'none';
+            statusText.style.backgroundColor = '#fff';
+            statusText.style.color = '#555';
+        }
+    });
 
     function startRecognitionLifecycle() {
         if (!isRecording || !SpeechRecognition || isSpeakingNow) return;
@@ -257,7 +313,7 @@
         recognition.interimResults = false;
         
         recognition.lang = 'ja-JP'; 
-        statusText.textContent = "自由にお話しください...";
+        statusText.textContent = isLectureMode ? "【講師発言待ち】大きく表示します..." : "自由にお話しください...";
 
         recognition.onend = () => {
             if (!isRecording) return;
@@ -273,158 +329,31 @@
             text = applyWordCorrection(text);
             const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
-            const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
-            const isEnglishInput = /[A-Za-z]/.test(text) || 
-                                   (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey)) ||
-                                   (isKatakanaOnly && (cleanKey.includes("モーニング") || cleanKey.includes("ハロー") || cleanKey.includes("サンキュー")));
+            // 講師モードがONの場合
+            if (isLectureMode) {
+                statusText.textContent = "同時翻訳中...";
+                
+                // ラベル名を現在の選択言語名にリアルタイム反映
+                lblLang1.textContent = `${getSelectedName(selectLang1)} (原文)`;
+                lblLang2.textContent = `${getSelectedName(selectLang2)} (訳文)`;
+                lblLang3.textContent = `${getSelectedName(selectLang3)} (訳文)`;
 
-            let msgClass, ttsLangCode, fromIso, toIso;
+                // 言語2と言語3へ同時にリクエスト
+                const trans2 = await executeSafeTranslation(text, getSelectedIso(selectLang1), getSelectedIso(selectLang2));
+                const trans3 = await executeSafeTranslation(text, getSelectedIso(selectLang1), getSelectedIso(selectLang3));
 
-            if (isEnglishInput) {
-                msgClass = 'msg-lang2'; 
-                ttsLangCode = selectLang1.value;  
-                fromIso = getSelectedIso(selectLang2);
-                toIso = getSelectedIso(selectLang1);
+                // 大画面に巨大文字を即時描画
+                outLang1.textContent = text;
+                outLang2.textContent = trans2;
+                outLang3.textContent = trans3;
+
+                statusText.textContent = "表示完了";
+
+                // 音声発話（speakText）はスキップしてマイクを即時リスタート
+                historyData.push({ time: new Date().toLocaleTimeString(), original: `[講師] ${text}`, translated: `② ${trans2} | ③ ${trans3}`, type: 'msg-lang1' });
+                setTimeout(startRecognitionLifecycle, 200);
+
             } else {
-                msgClass = 'msg-lang1'; 
-                ttsLangCode = selectLang2.value;  
-                fromIso = getSelectedIso(selectLang1);
-                toIso = getSelectedIso(selectLang2);
-            }
-
-            statusText.textContent = "翻訳中...";
-            
-            let translatedText = localTranslationDictionary[cleanKey];
-            if (!translatedText) {
-                translatedText = await executeSafeTranslation(text, fromIso, toIso);
-            }
-
-            statusText.textContent = "翻訳完了...";
-            addChatBubble(text, translatedText, msgClass);
-
-            let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7; 
-            speakText(translatedText, ttsLangCode, estimatedPitch);
-
-            historyData.push({
-                time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass
-            });
-        };
-
-        try { recognition.start(); } catch(e) {}
-    }
-
-    async function executeSafeTranslation(text, from, to) {
-        if (from === to) return text;
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-        try {
-            const res = await fetch(url); 
-            const data = await res.json();
-            if (data && data.responseData && data.responseData.translatedText) {
-                if (data.responseData.translatedText.includes("DISTINCT LANGUAGES")) {
-                    return text; 
-                }
-                return data.responseData.translatedText;
-            }
-            return text; 
-        } catch (e) { 
-            return text; 
-        }
-    }
-
-    function applyWordCorrection(text) {
-        const dictConfig = txtDict.value;
-        if (!dictConfig) return text;
-        const pairs = dictConfig.split(',');
-        pairs.forEach(pair => {
-            const [wrong, right] = pair.split(':');
-            if (wrong && right) text = text.replace(new RegExp(wrong.trim(), 'gi'), right.trim());
-        });
-        return text;
-    }
-
-    function addChatBubble(original, translated, className) {
-        const box = document.createElement('div');
-        box.className = `msg-box ${className}`;
-        const origEl = document.createElement('div'); origEl.className = 'msg-original'; origEl.innerText = original;
-        const transEl = document.createElement('div'); transEl.className = 'msg-trans'; transEl.innerText = translated;
-        box.appendChild(origEl); box.appendChild(transEl);
-        chatHistory.appendChild(box); chatHistory.scrollTop = chatHistory.scrollHeight;
-    }
-
-    function speakText(text, lang, pitch) {
-        if (!window.speechSynthesis) return;
-        
-        isSpeakingNow = true;
-        window.speechSynthesis.cancel();
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = lang; utterance.pitch = pitch; utterance.rate = 1.1; 
-
-        const voices = window.speechSynthesis.getVoices();
-        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0,2).toLowerCase()));
-        if (matchingVoice) utterance.voice = matchingVoice;
-
-        utterance.onend = () => { 
-            isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 200);
-        };
-        utterance.onerror = () => { 
-            isSpeakingNow = false; 
-            setTimeout(startRecognitionLifecycle, 200);
-        };
-
-        window.speechSynthesis.speak(utterance);
-    }
-
-    function unlockMobileAudio() {
-        if (!window.speechSynthesis) return;
-        const u = new SpeechSynthesisUtterance("");
-        u.volume = 0;
-        window.speechSynthesis.speak(u);
-    }
-
-    btnStart.addEventListener('click', () => {
-        if (!SpeechRecognition) {
-            alert("音声認識未対応ブラウザです。");
-            return;
-        }
-
-        if (!isRecording) {
-            unlockMobileAudio();
-            isRecording = true;
-            startRecognitionLifecycle();
-            btnStart.textContent = "自動通訳を停止";
-            btnStart.classList.add('recording');
-        } else {
-            isRecording = false;
-            if(recognition) {
-                recognition.onend = null;
-                try { recognition.stop(); } catch(e){}
-            }
-            btnStart.textContent = "自動通訳スタート";
-            btnStart.classList.remove('recording');
-            statusText.textContent = "マイク停止中";
-        }
-    });
-
-    btnDownload.addEventListener('click', () => {
-        if (historyData.length === 0) return;
-        let output = "";
-        historyData.forEach((item) => { output += `[${item.time}] ${item.original} -> ${item.translated}\n`; });
-        const blob = new Blob([output], { type: 'text/plain;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        a.download = `chat-${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
-    });
-
-    btnClear.addEventListener('click', () => {
-        if (confirm("履歴を消去しますか？")) { chatHistory.innerHTML = ''; historyData = []; }
-    });
-
-    if (window.speechSynthesis) {
-        window.speechSynthesis.getVoices();
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
-    }
-</script>
-</body>
-</html>
+                // 通常モード（従来の全自動双方向通訳）
+                const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
+                const isEnglishInput
