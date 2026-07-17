@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube システム音声共有リアルタイム翻訳機</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #121212; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 900px; width: 100%; }
+        h1 { text-align: center; color: #ff0000; margin-bottom: 5px; font-size: 28px; }
+        .setup-box, .dict-box { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        label { font-weight: bold; display: block; margin-top: 10px; color: #ccc; }
+        input, select, button, textarea { width: 100%; padding: 12px; margin: 8px 0; border-radius: 4px; border: none; font-size: 16px; box-sizing: border-box; }
+        input, select, textarea { background: #2a2a2a; color: #fff; }
+        textarea { height: 80px; font-family: monospace; font-size: 13px; resize: vertical; }
+        
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        #start-btn { background: #ff0000; color: white; font-weight: bold; cursor: pointer; flex: 2; }
+        #stop-btn { background: #555; color: white; font-weight: bold; cursor: pointer; flex: 1; display: none; }
+        #start-btn:hover { background: #cc0000; }
+        #stop-btn:hover { background: #444; }
+
+        #subtitle-overlay { margin-top: 20px; min-height: 140px; padding: 25px; background: rgba(0,0,0,0.9); border-left: 5px solid #ff0000; border-radius: 4px; display: none; }
+        .sub-text { font-size: 28px; text-align: center; line-height: 1.6; font-weight: bold; color: #fff; }
+        .sub-original { font-size: 16px; color: #888; text-align: center; margin-top: 10px; }
+        
+        .info-text { color: #00ffcc; font-size: 14px; font-weight: bold; }
+        .step-list { text-align: left; background: #2a2a2a; padding: 15px 15px 15px 30px; border-radius: 6px; font-size: 14px; margin: 15px 0; }
+        .step-list li { margin: 8px 0; }
+        .dict-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎬 YouTube Inner-Audio Translator</h1>
+    
+    <div class="setup-box">
+        <p class="info-text">🚀 localhost環境により、ブラウザの制限が解除された完全版です。</p>
+        
+        <ul class="step-list">
+            <li><strong>【重要：音声共有の手順】</strong></li>
+            <li>1. 別タブで翻訳したいYouTube動画を開いておきます。</li>
+            <li>2. 下のボタンを押すと、画面共有のポップアップが表示されます。</li>
+            <li>3. **「Chromeタブ」**を選択し、リストから **YouTubeの動画タブ** をクリック。</li>
+            <li>4. 左下の **「タブのオーディオも共有する」に必ずチェックを入れて** 「共有」を押します。</li>
+        </ul>
+
+        <label>元の動画の言語:</label>
+        <select id="source-lang">
+            <option value="ja-JP">日本語</option>
+            <option value="en-US">英語</option>
+        </select>
+
+        <label>翻訳先言語:</label>
+        <select id="target-lang">
+            <option value="vi-VN">ベトナム語 (Vietnamese)</option>
+            <option value="ja-JP">日本語 (Japanese)</option>
+            <option value="en-US">英語 (English)</option>
+            <option value="th-TH">タイ語 (Thai)</option>
+        </select>
+        
+        <div class="btn-group">
+            <button id="start-btn" onclick="startApp()">PC音声を共有して翻訳開始</button>
+            <button id="stop-btn" onclick="stopApp()">停止する</button>
+        </div>
+    </div>
+
+    <!-- 辞書設定エリア -->
+    <div class="dict-box">
+        <h3>📖 カスタム辞書機能</h3>
+        <div class="dict-grid">
+            <div>
+                <label>① 認識補正辞書（日本語の誤認識を直す）</label>
+                <textarea id="recognize-dict" placeholder="ベトナム=ベトナム語"></textarea>
+            </div>
+            <div>
+                <label>② 翻訳辞書（不自然な翻訳を直す）</label>
+                <textarea id="translate-dict" placeholder="Xin chào=こんにちは"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- 字幕表示エリア -->
+    <div id="subtitle-overlay">
+        <div id="translated-text" class="sub-text" style="color: #ffaa00;">🔊 音声共有接続完了！YouTubeタブで動画を再生してください。</div>
+        <div id="original-text" class="sub-original"></div>
+    </div>
+</div>
+
+<script>
+    let recognition;
+    let isListening = false;
+    let sharedStream = null;
+    let audioCtx = null;
+    let mediaStreamSource = null;
+    let mediaStreamDestination = null;
+
+    let recognizeDict = {};
+    let translateDict = {};
+    let speechQueue = [];
+    let isSpeaking = false;
+
+    function loadDictionaries() {
+        recognizeDict = parseDictText(document.getElementById("recognize-dict").value);
+        translateDict = parseDictText(document.getElementById("translate-dict").value);
+    }
+
+    function parseDictText(text) {
+        const dict = {};
+        text.split('\n').forEach(line => {
+            const parts = line.split('=');
+            if (parts.length === 2) dict[parts[0].trim()] = parts[1].trim();
+        });
+        return dict;
+    }
+
+    function applyDictionary(text, dict) {
+        let result = text;
+        for (const [key, value] of Object.entries(dict)) {
+            const regex = new RegExp(key, 'gi');
+            result = result.replace(regex, value);
+        }
+        return result;
+    }
+
+    async function translateText(text, srcLang, targetLang) {
+        const src = srcLang.split('-')[0];
+        const tgt = targetLang.split('-')[0];
+        if (src === tgt) return text;
+        
+        try {
+            const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${src}|${tgt}`);
+            const data = await res.json();
+            return data.responseData.translatedText;
+        } catch (e) {
+            return text;
+        }
+    }
+
+    function queueSpeech(text, langCode) {
+        speechQueue.push({ text: text, lang: langCode });
+        processSpeechQueue();
+    }
+
+    function processSpeechQueue() {
+        if (isSpeaking || speechQueue.length === 0) return;
+
+        isSpeaking = true;
+        const current = speechQueue.shift();
+        const utterance = new SpeechSynthesisUtterance(current.text);
+        utterance.lang = current.lang;
+
+        utterance.onend = () => {
+            isSpeaking = false;
+            processSpeechQueue();
+        };
+
+        utterance.onerror = () => {
+            isSpeaking = false;
+            processSpeechQueue();
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    async function startApp() {
+        loadDictionaries();
+
+        try {
+            // 💡 localhost環境化において、初めてタブのデジタル音声ストリームが正常に音声認識へと中継可能になります
+            sharedStream = await navigator.mediaDevices.getDisplayMedia({
+                video: true,
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            });
+
+            sharedStream.getVideoTracks().forEach(track => track.stop());
+
+            if (sharedStream.getAudioTracks().length === 0) {
+                stopApp();
+                return alert("『タブのオーディオも共有する』にチェックが入っていません。");
+            }
+
+            // UI切り替え
+            document.getElementById("subtitle-overlay").style.display = "block";
+            document.getElementById("stop-btn").style.display = "block";
+            
+            initSpeechRecognition();
+
+        } catch (e) {
+            console.error(e);
+            alert("音声共有の開始に失敗しました。");
+        }
+    }
+
+    function initSpeechRecognition() {
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("お使いのブラウザは音声認識に対応していません。");
+            return;
+        }
+
+        if (isListening) {
+            try { recognition.stop(); } catch(e) {}
+        }
+
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true; 
+        
+        const sourceLang = document.getElementById("source-lang").value;
+        const targetLang = document.getElementById("target-lang").value;
+        recognition.lang = sourceLang;
+
+        let lastProcessedLength = 0;
+
+        recognition.onstart = () => {
+            isListening = true;
+            document.getElementById("translated-text").innerHTML = "🔊 <strong>接続成功！</strong>最初の1回だけマイク許可を押せば、もうポップアップは出ません。";
+        };
+
+        recognition.onresult = async (event) => {
+            let fullTranscript = "";
+            let finalTranscript = "";
+
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript;
+                } else {
+                    fullTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            let currentText = finalTranscript || fullTranscript;
+            let untranslatedText = currentText.substring(lastProcessedLength).trim();
+
+            if (untranslatedText.length > 0) {
+                if (untranslatedText.length >= 12 || untranslatedText.includes("、") || untranslatedText.includes("。")) {
+                    lastProcessedLength = currentText.length;
+                    processParallelTranslation(untranslatedText, sourceLang, targetLang);
+                }
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error("音声認識エラー:", event.error);
+        };
+
+        // 🌟 localhost環境であれば、再起動時にポップアップを出さずに一瞬でバックグラウンド復帰します
+        recognition.onend = () => {
+            if (isListening) {
+                lastProcessedLength = 0;
+                try { recognition.start(); } catch(e) {}
+            }
+        };
+
+        try {
+            recognition.start();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function processParallelTranslation(text, sourceLang, targetLang) {
+        let cleanedText = applyDictionary(text, recognizeDict);
+        document.getElementById("original-text").innerText = `原文: ${cleanedText}`;
+        
+        let translated = await translateText(cleanedText, sourceLang, targetLang);
+        let finalTranslated = applyDictionary(translated, translateDict);
+        
+        document.getElementById("translated-text").innerText = finalTranslated;
+        queueSpeech(finalTranslated, targetLang);
+    }
+
+    function stopApp() {
+        isListening = false;
+        if (sharedStream) {
+            sharedStream.getTracks().forEach(track => track.stop());
+        }
+        if (recognition) {
+            recognition.stop();
+        }
+        speechQueue = [];
+        window.speechSynthesis.cancel();
+        document.getElementById("translated-text").innerText = "停止しました。";
+        document.getElementById("original-text").innerText = "";
+        document.getElementById("stop-btn").style.display = "none";
+    }
+</script>
+</body>
+</html>
