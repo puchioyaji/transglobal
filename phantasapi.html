@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gausium Phantas 統合管理システム (清掃レポート機能付き)</title>
+  <title>Gausium Phantas 統合フリート管理 (Cloud API連動版)</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -90,7 +90,7 @@
     .view-section { display: none; }
     .view-section.active { display: block; }
 
-    /* 一覧表示タブ */
+    /* タブ */
     .tab-bar {
       display: flex;
       gap: 8px;
@@ -301,7 +301,6 @@
 
     .log-container { background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.85rem; padding: 12px; border-radius: 8px; height: 110px; overflow-y: auto; white-space: pre-wrap; }
 
-    /* 【新規追加】清掃レポート用スタイル */
     .report-table {
       width: 100%;
       border-collapse: collapse;
@@ -330,7 +329,6 @@
     .report-success { background: #d1fae5; color: #065f46; }
     .report-partial { background: #fef3c7; color: #92400e; }
 
-    /* レポートモーダル内部レイアウト */
     .report-detail-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -345,6 +343,15 @@
     }
     .report-stat-label { font-size: 0.75rem; color: var(--text-sub); }
     .report-stat-val { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+
+    /* API構成コントロール設定パネル */
+    .api-panel {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
@@ -354,13 +361,32 @@
   <header>
     <div>
       <h1>Gausium Phantas 統合フリート管理システム</h1>
-      <p style="font-size:0.85rem; color: var(--text-sub);">稼働状況: 全 <span id="total-count">3</span> 台 | 稼働中: <span id="working-count" style="color:var(--primary); font-weight:bold;">1</span> 台</p>
+      <p style="font-size:0.85rem; color: var(--text-sub);">稼働状況: 全 <span id="total-count">0</span> 台 | 稼働中: <span id="working-count" style="color:var(--primary); font-weight:bold;">0</span> 台</p>
     </div>
     <div style="font-size:0.85rem; color:var(--text-sub);">最終同期: <span id="last-sync-time">--:--:--</span></div>
   </header>
 
   <!-- VIEW 1: ロボット一覧画面 -->
   <div id="view-list" class="view-section active">
+    <!-- 【新規追加】Gausium Cloud API 一括取得パネル -->
+    <div class="api-panel">
+      <div style="font-size:0.9rem; font-weight:700; margin-bottom:10px; color:var(--text-main);">📡 Gausium Cloud API 設定 & 機器一覧同期</div>
+      <div class="grid-2">
+        <div class="form-group" style="margin-bottom:0;">
+          <label>API エンドポイント URL</label>
+          <input type="text" id="global-api-url" value="https://openapi.gs-robot.com">
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label>Bearer Access Token (または AppKey)</label>
+          <input type="password" id="global-api-token" value="demo-token-12345" placeholder="Gausium API Tokenを入力">
+        </div>
+      </div>
+      <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.8rem; color:var(--text-sub);" id="api-status-msg">モード: シミュレーション / 開発用手動ロード可能</span>
+        <button class="btn-primary" onclick="fetchGausiumFleetFromCloud()" style="font-size:0.85rem; padding:8px 16px;">🔄 Gausium Cloudから機器一覧を取得</button>
+      </div>
+    </div>
+
     <div style="margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center;">
       <h2 style="font-size:1.1rem;">全国 Phantas 導入・稼働一覧</h2>
       <div class="tab-bar">
@@ -439,7 +465,7 @@
       </div>
     </div>
 
-    <!-- 【新規追加】清掃実績レポート一覧ウィンドウ -->
+    <!-- 清掃実績レポート一覧ウィンドウ -->
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-header">
         <div class="card-title">📊 清掃タスク実行レポート・履歴 (Cleaning Reports)</div>
@@ -459,12 +485,11 @@
           </tr>
         </thead>
         <tbody id="report-table-body">
-          <!-- 動的に挿入されます -->
         </tbody>
       </table>
     </div>
 
-    <!-- ハードウェア・コンポーネントステータス診断ウィンドウ -->
+    <!-- コンポーネントステータス診断ウィンドウ -->
     <div class="card" style="margin-bottom: 20px;">
       <div class="card-title">コンポーネント・センサー稼働状態診断 (System Diagnostics)</div>
       <div class="component-grid">
@@ -480,7 +505,7 @@
     <div class="grid-2" style="margin-bottom: 20px;">
       <!-- API構成 -->
       <div class="card">
-        <div class="card-title">API 接続構成</div>
+        <div class="card-title">API 接続構成 (個別機体用)</div>
         <div class="form-group">
           <label>動作モード</label>
           <select id="mode-select" onchange="toggleMode()">
@@ -490,7 +515,7 @@
         </div>
         <div class="form-group">
           <label>エンドポイント URL</label>
-          <input type="text" id="api-url" value="https://api.gausium.com/open-api/v1" disabled>
+          <input type="text" id="api-url" value="https://openapi.gs-robot.com" disabled>
         </div>
         <div class="form-group">
           <label>API Token / Key</label>
@@ -569,7 +594,7 @@
   </div>
 </div>
 
-<!-- 【新規追加】清掃レポート詳細ポップアップモーダル -->
+<!-- 清掃レポート詳細モーダル -->
 <div class="modal-overlay" id="reportDetailModal">
   <div class="modal-content">
     <div class="modal-header">
@@ -616,9 +641,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
+  // 初期データ（クラウドAPI通信未接続時/デモ用のフォールバックデータ）
   let fleet = [
     {
-      id: 'Phantas-A01',
+      id: 'GS-Phantas-01',
       name: 'Phantas-01 (東京丸の内)',
       location: '東京都千代田区 丸の内1-1',
       mapName: '1F_オフィスエリア.map',
@@ -646,23 +672,11 @@
           status: 'COMPLETED',
           waterConsumed: 32,
           batteryConsumed: 22
-        },
-        {
-          id: 'RPT-20260720-02',
-          dateTime: '2026/07/20 22:00 - 22:30',
-          taskName: '夜間廊下スポット清掃',
-          mapName: '1F_オフィスエリア.map',
-          cleanedArea: 92.4,
-          durationMinutes: 30,
-          coverage: 95,
-          status: 'COMPLETED',
-          waterConsumed: 18,
-          batteryConsumed: 14
         }
       ]
     },
     {
-      id: 'Phantas-A02',
+      id: 'GS-Phantas-02',
       name: 'Phantas-02 (大阪梅田)',
       location: '大阪府大阪市北区 梅田1-1',
       mapName: '2F_会議室フロア.map',
@@ -694,7 +708,7 @@
       ]
     },
     {
-      id: 'Phantas-A03',
+      id: 'GS-Phantas-03',
       name: 'Phantas-03 (福岡天神)',
       location: '福岡県福岡市中央区 天神1-1',
       mapName: '1F_エントランス.map',
@@ -710,20 +724,7 @@
       isCleaning: false,
       forbiddenZones: [],
       alertMessage: '⚠️ 汚水タンクが満水です。手動排水を行ってください。',
-      reports: [
-        {
-          id: 'RPT-20260721-03',
-          dateTime: '2026/07/21 11:00 - 11:20',
-          taskName: 'エントランス定期水拭き',
-          mapName: '1F_エントランス.map',
-          cleanedArea: 65.0,
-          durationMinutes: 20,
-          coverage: 62,
-          status: 'PARTIAL',
-          waterConsumed: 45,
-          batteryConsumed: 18
-        }
-      ]
+      reports: []
     }
   ];
 
@@ -751,6 +752,70 @@
     renderFleetList();
     startFleetPolling();
   };
+
+  // 【新規追加機能】Gausium Cloud API (/v1alpha1/robots) から機器一覧を取得
+  async function fetchGausiumFleetFromCloud() {
+    const apiUrl = document.getElementById('global-api-url').value.replace(/\/$/, "");
+    const apiToken = document.getElementById('global-api-token').value;
+    const msgLabel = document.getElementById('api-status-msg');
+
+    msgLabel.innerText = "⏳ Gausium Cloudと通信中...";
+    msgLabel.style.color = "var(--primary)";
+
+    try {
+      const response = await fetch(`${apiUrl}/v1alpha1/robots`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      msgLabel.innerText = "✅ クラウド機器一覧の取得に成功しました";
+      msgLabel.style.color = "var(--success)";
+
+      // クラウドの機器レスポンスデータをフロントエンドモデルにマッピング
+      if (data && (data.robots || Array.isArray(data))) {
+        const rawRobots = data.robots || data;
+        
+        fleet = rawRobots.map((item, idx) => {
+          return {
+            id: item.robot_id || item.id || `GS-Phantas-${idx+1}`,
+            name: item.name || item.robot_name || `Phantas-${item.robot_id || idx+1}`,
+            location: item.location_name || item.site || '未設定拠点',
+            mapName: item.current_map || 'default_floor.map',
+            status: item.status || 'ONLINE',
+            action: item.current_task || '待機中',
+            battery: item.battery_level !== undefined ? item.battery_level : 85,
+            water: item.water_level !== undefined ? item.water_level : 90,
+            cleanedArea: item.today_cleaned_area || 0.0,
+            workingTimeMinutes: item.today_work_time || 0,
+            pose: item.pose || { x: 3.0, y: 3.0, angle: 0 },
+            latLng: item.lat_lng || [35.681236 + (idx * 0.05), 139.767125 + (idx * 0.05)],
+            mode: 'live',
+            isCleaning: item.status === 'WORKING',
+            forbiddenZones: [],
+            alertMessage: item.alert || null,
+            reports: []
+          };
+        });
+
+        renderFleetList();
+        if (document.getElementById('fleet-tab-map').classList.contains('active')) {
+          renderJapanOverviewMap();
+        }
+      }
+    } catch (err) {
+      console.warn("API取得エラーのためフォールバック実行:", err);
+      msgLabel.innerText = `⚠️ クラウド通信不可 (CORS制限等): ローカル環境・プロキシ設定を確認してください [${err.message}]`;
+      msgLabel.style.color = "var(--warning)";
+    }
+  }
 
   function switchFleetTab(tab) {
     document.getElementById('tab-btn-card').className = tab === 'card' ? 'tab-btn active' : 'tab-btn';
@@ -797,7 +862,6 @@
     }, 150);
   }
 
-  // レポートテーブルの描画関数
   function renderReportTable(robot) {
     const tableBody = document.getElementById('report-table-body');
     if (!tableBody) return;
@@ -832,7 +896,6 @@
     });
   }
 
-  // 清掃レポート詳細モーダル表示
   function openReportDetailModal(reportId) {
     const robot = fleet.find(r => r.id === selectedRobotId);
     if (!robot) return;
@@ -848,15 +911,12 @@
 
     document.getElementById('reportDetailModal').classList.add('active');
 
-    // 簡易サマリーマップの描画
     setTimeout(() => {
       const rCanvas = document.getElementById('reportSummaryCanvas');
       if (rCanvas) {
         const rCtx = rCanvas.getContext('2d');
         rCtx.fillStyle = '#0f172a'; rCtx.fillRect(0, 0, rCanvas.width, rCanvas.height);
         rCtx.fillStyle = '#1e293b'; rCtx.fillRect(30, 20, rCanvas.width - 60, rCanvas.height - 40);
-        
-        // 清掃済みシミュレーションエリア描画
         rCtx.fillStyle = 'rgba(37, 99, 235, 0.4)';
         rCtx.fillRect(50, 40, (rCanvas.width - 100) * (rpt.coverage / 100), rCanvas.height - 80);
       }
@@ -1219,7 +1279,6 @@
         case 'START': robot.status = 'WORKING'; robot.action = '清掃実行中'; robot.isCleaning = true; break;
         case 'PAUSE': robot.status = 'ONLINE'; robot.action = '一時停止'; robot.isCleaning = false; break;
         case 'DOCK':
-          // タスク完了/終了とみなしレポートを自動追加生成
           if (robot.isCleaning) {
             const newReport = {
               id: `RPT-${Date.now()}`,
