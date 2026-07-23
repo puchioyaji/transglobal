@@ -3,11 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gausium Phantas 統合フリート管理 (Cloud API連動版)</title>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
+  <title>Gausium Phantas コントロールパネル (API連携版)</title>
+  
   <style>
     :root {
       --bg-color: #f4f6f9;
@@ -32,7 +29,7 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1100px;
       margin: 0 auto;
       display: grid;
       grid-template-columns: 1fr;
@@ -54,16 +51,22 @@
     .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
+      gap: 8px;
+      padding: 6px 14px;
       border-radius: 20px;
-      font-size: 0.8rem;
+      font-size: 0.875rem;
       font-weight: 600;
     }
     .status-online { background: #d1fae5; color: #065f46; }
     .status-working { background: #dbeafe; color: #1e40af; }
     .status-charging { background: #fef3c7; color: #92400e; }
-    .status-alert { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .status-offline { background: #fee2e2; color: #991b1b; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
 
     .card {
       background: var(--card-bg);
@@ -87,131 +90,53 @@
       letter-spacing: 0.05em;
     }
 
-    .view-section { display: none; }
-    .view-section.active { display: block; }
-
-    /* タブ */
-    .tab-bar {
-      display: flex;
-      gap: 8px;
-      background: #e2e8f0;
-      padding: 4px;
-      border-radius: 8px;
-    }
-
-    .tab-btn {
-      padding: 8px 16px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      border: none;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--text-sub);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .tab-btn.active {
-      background: #ffffff;
-      color: var(--primary);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .fleet-tab-content { display: none; }
-    .fleet-tab-content.active { display: block; }
-
-    #japanOverviewMap {
+    /* SLAMマップキャンバス */
+    .map-wrapper {
+      position: relative;
       width: 100%;
-      height: 500px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      z-index: 1;
-    }
-
-    .fleet-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-      gap: 20px;
-    }
-
-    .robot-card {
-      background: var(--card-bg);
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      padding: 16px;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .robot-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-      border-color: var(--primary);
-    }
-
-    .robot-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 10px;
-    }
-
-    .robot-name { font-size: 1.1rem; font-weight: 700; color: var(--text-main); }
-    .robot-loc { font-size: 0.8rem; color: var(--text-sub); margin-top: 2px; }
-
-    .card-metrics {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .mini-metric { background: #f8fafc; padding: 8px 10px; border-radius: 6px; font-size: 0.8rem; }
-    .mini-metric-label { color: var(--text-sub); font-size: 0.75rem; }
-    .mini-metric-val { font-weight: 700; margin-top: 2px; }
-
-    .card-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px dashed var(--border);
-      font-size: 0.85rem;
-    }
-
-    .alert-box {
-      padding: 10px 14px;
+      background: #0f172a;
       border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      display: block;
+      background: #1e293b;
+      max-width: 100%;
+      height: auto;
+    }
+
+    .map-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+
+    /* API設定フォーム */
+    .form-group { margin-bottom: 12px; }
+    .form-group label {
+      display: block;
       font-size: 0.85rem;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      margin-bottom: 4px;
+      color: var(--text-sub);
     }
-    .alert-normal { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
-    .alert-warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
-
-    .component-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-top: 8px;
-    }
-    .component-card {
-      background: #f8fafc;
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 8px 12px;
       border: 1px solid var(--border);
-      padding: 12px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      border-radius: 6px;
+      font-size: 0.9rem;
     }
-    .comp-name { font-size: 0.85rem; font-weight: 600; }
-    .comp-status { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-    .comp-ok { background: #d1fae5; color: #065f46; }
-    .comp-warn { background: #fef3c7; color: #92400e; }
 
+    /* メトリクス表示 */
     .metrics-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -224,133 +149,57 @@
       border: 1px solid #edf2f7;
     }
     .metric-label { font-size: 0.75rem; color: var(--text-sub); }
-    .metric-value { font-size: 1.1rem; font-weight: 700; margin-top: 4px; }
+    .metric-value { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
 
-    .progress-bar-bg { background: #e2e8f0; height: 6px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
-    .progress-bar-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s ease; }
-
-    .back-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    /* プログレスバー */
+    .progress-bar-bg {
       background: #e2e8f0;
-      color: var(--text-main);
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 0.85rem;
+      height: 6px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* 操作ボタン */
+    .control-btns {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    button {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      border: none;
-      margin-bottom: 16px;
+      transition: opacity 0.2s;
     }
-    .back-btn:hover { background: #cbd5e1; }
-
-    .loc-input-group { display: flex; gap: 8px; }
-    .loc-input-group input { flex: 1; }
-
-    /* モーダル */
-    .modal-overlay {
-      position: fixed;
-      top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    .modal-overlay.active { display: flex; }
-
-    .modal-content {
-      background: #ffffff;
-      border-radius: 12px;
-      width: 90%;
-      max-width: 850px;
-      padding: 24px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
-      max-height: 90vh;
-      overflow-y: auto;
-    }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    #locationSelectMap { width: 100%; height: 400px; border-radius: 8px; border: 1px solid var(--border); }
-
-    /* マップツールバー */
-    .map-toolbar {
-      display: flex; gap: 12px; align-items: center; flex-wrap: wrap; background: #f8fafc; padding: 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--border);
-    }
-    .tool-group { display: flex; align-items: center; gap: 8px; }
-    .tool-btn { padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; border: 1px solid var(--border); background: #ffffff; cursor: pointer; font-weight: 600; }
-    .tool-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
-
-    .map-wrapper {
-      position: relative; width: 100%; background: #0f172a; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center;
-    }
-    canvas { display: block; background: #1e293b; max-width: 100%; height: auto; cursor: crosshair; }
-
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
-    .form-group { margin-bottom: 12px; }
-    .form-group label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: var(--text-sub); }
-    .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
-
-    .control-btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    button { padding: 10px 14px; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
     button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
     .btn-primary { background: var(--primary); color: white; }
     .btn-warning { background: var(--warning); color: white; }
     .btn-danger { background: var(--danger); color: white; }
     .btn-secondary { background: #64748b; color: white; }
 
-    .log-container { background: #0f172a; color: #38bdf8; font-family: monospace; font-size: 0.85rem; padding: 12px; border-radius: 8px; height: 110px; overflow-y: auto; white-space: pre-wrap; }
-
-    .report-table {
-      width: 100%;
-      border-collapse: collapse;
+    /* ログ */
+    .log-container {
+      background: #0f172a;
+      color: #38bdf8;
+      font-family: monospace;
       font-size: 0.85rem;
-      margin-top: 8px;
-    }
-    .report-table th, .report-table td {
-      border: 1px solid var(--border);
-      padding: 10px 12px;
-      text-align: left;
-    }
-    .report-table th {
-      background: #f8fafc;
-      color: var(--text-sub);
-      font-weight: 600;
-    }
-    .report-table tr:hover { background: #f1f5f9; }
-
-    .report-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    .report-success { background: #d1fae5; color: #065f46; }
-    .report-partial { background: #fef3c7; color: #92400e; }
-
-    .report-detail-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
-    }
-    .report-stat-card {
-      background: #f8fafc;
-      padding: 12px 16px;
+      padding: 12px;
       border-radius: 8px;
-      border: 1px solid var(--border);
-    }
-    .report-stat-label { font-size: 0.75rem; color: var(--text-sub); }
-    .report-stat-val { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
-
-    /* API構成コントロール設定パネル */
-    .api-panel {
-      background: #f8fafc;
-      border: 1px solid var(--border);
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 16px;
+      height: 140px;
+      overflow-y: auto;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -360,961 +209,467 @@
   <!-- ヘッダー -->
   <header>
     <div>
-      <h1>Gausium Phantas 統合フリート管理システム</h1>
-      <p style="font-size:0.85rem; color: var(--text-sub);">稼働状況: 全 <span id="total-count">0</span> 台 | 稼働中: <span id="working-count" style="color:var(--primary); font-weight:bold;">0</span> 台</p>
+      <h1>Phantas 清掃ロボット コントロールパネル</h1>
+      <p style="font-size:0.85rem; color: var(--text-sub);">接続ロボット: <span id="display-robot-id">未接続</span></p>
     </div>
-    <div style="font-size:0.85rem; color:var(--text-sub);">最終同期: <span id="last-sync-time">--:--:--</span></div>
+    <div id="status-badge" class="status-badge status-offline">● 未接続</div>
   </header>
 
-  <!-- VIEW 1: ロボット一覧画面 -->
-  <div id="view-list" class="view-section active">
-    <!-- 【新規追加】Gausium Cloud API 一括取得パネル -->
-    <div class="api-panel">
-      <div style="font-size:0.9rem; font-weight:700; margin-bottom:10px; color:var(--text-main);">📡 Gausium Cloud API 設定 & 機器一覧同期</div>
-      <div class="grid-2">
-        <div class="form-group" style="margin-bottom:0;">
-          <label>API エンドポイント URL</label>
-          <input type="text" id="global-api-url" value="https://openapi.gs-robot.com">
-        </div>
-        <div class="form-group" style="margin-bottom:0;">
-          <label>Bearer Access Token (または AppKey)</label>
-          <input type="password" id="global-api-token" value="demo-token-12345" placeholder="Gausium API Tokenを入力">
-        </div>
-      </div>
-      <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:0.8rem; color:var(--text-sub);" id="api-status-msg">モード: シミュレーション / 開発用手動ロード可能</span>
-        <button class="btn-primary" onclick="fetchGausiumFleetFromCloud()" style="font-size:0.85rem; padding:8px 16px;">🔄 Gausium Cloudから機器一覧を取得</button>
-      </div>
+  <!-- PHANTAS 屋内SLAMマップ表示領域 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">PHANTAS リアルタイムマップ (SLAM / 2D Grid)</div>
+      <div style="font-size: 0.85rem; color: var(--text-sub);">マップ名: <strong id="map-name-display" style="color:var(--text-main);">--</strong></div>
     </div>
-
-    <div style="margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center;">
-      <h2 style="font-size:1.1rem;">全国 Phantas 導入・稼働一覧</h2>
-      <div class="tab-bar">
-        <button class="tab-btn active" id="tab-btn-card" onclick="switchFleetTab('card')">📋 カード表示</button>
-        <button class="tab-btn" id="tab-btn-map" onclick="switchFleetTab('map')">🗺️ 地図表示</button>
-      </div>
+    <div class="map-wrapper">
+      <canvas id="slamCanvas" width="800" height="400"></canvas>
     </div>
-
-    <!-- タブ 1: カード一覧 -->
-    <div id="fleet-tab-card" class="fleet-tab-content active">
-      <div class="fleet-grid" id="robot-cards-container"></div>
-    </div>
-
-    <!-- タブ 2: 日本地図表示 -->
-    <div id="fleet-tab-map" class="fleet-tab-content">
-      <div id="japanOverviewMap"></div>
+    <div class="map-legend">
+      <div class="legend-item"><div class="legend-color" style="background:#000000; border:1px solid #666;"></div> 障害物 / 壁</div>
+      <div class="legend-item"><div class="legend-color" style="background:#334155;"></div> 移動可能領域</div>
+      <div class="legend-item"><div class="legend-color" style="background:rgba(37, 99, 235, 0.4);"></div> 清掃済み領域</div>
+      <div class="legend-item"><div class="legend-color" style="background:#10b981;"></div> 充電ドック (Home)</div>
+      <div class="legend-item"><div class="legend-color" style="background:#ef4444;"></div> Phantas (現在位置)</div>
     </div>
   </div>
 
-  <!-- VIEW 2: 個別詳細 ＆ マップ編集 ＆ ステータス ＆ レポート画面 -->
-  <div id="view-detail" class="view-section">
-    <button class="back-btn" onclick="showListView()">← フリート一覧に戻る</button>
-
-    <!-- アラート表示エリア -->
-    <div id="alert-banner" class="alert-box alert-normal">
-      <span>✅ システム正常操作中: アラートやエラーは検知されていません</span>
-    </div>
-
-    <!-- ロボット基本情報 -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div class="card-header" style="margin-bottom:12px;">
-        <div>
-          <h2 id="detail-robot-name" style="font-size:1.3rem;">Phantas-A01</h2>
-          <p id="detail-robot-id-display" style="font-size:0.85rem; color:var(--text-sub);">ID: Phantas-A01</p>
-        </div>
-        <div id="detail-status-badge" class="status-badge status-online">● オンライン</div>
-      </div>
-
-      <div class="form-group" style="margin-bottom:0;">
-        <label>設置場所 (フリーテキスト入力 または 地図からピンで選択)</label>
-        <div class="loc-input-group">
-          <input type="text" id="robot-loc-input" value="東京都千代田区 丸の内1-1" onchange="updateLocationText()">
-          <button class="btn-secondary" onclick="openLocationPickerModal()">🗺️ 地図から微調整</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- SLAM マップエディタ -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div class="card-header">
-        <div class="card-title">SLAM マップ・エディタ (インプット / 清掃不可エリア修正)</div>
-        <div style="font-size: 0.85rem; color: var(--text-sub);">現在マップ: <strong id="map-name-display" style="color:var(--text-main);">1F_オフィスエリア.map</strong></div>
-      </div>
-
-      <div class="map-toolbar">
-        <div class="tool-group">
-          <label style="font-size:0.8rem; font-weight:600;">📥 マップインプット:</label>
-          <input type="file" id="map-file-input" accept="image/*" onchange="loadCustomMapImage(event)" style="font-size:0.8rem;">
-        </div>
-        <div style="height:20px; border-right:1px solid var(--border); margin:0 4px;"></div>
-        <div class="tool-group">
-          <span style="font-size:0.8rem; font-weight:600;">✏️ 修正ツール:</span>
-          <button class="tool-btn active" id="btn-tool-none" onclick="setEditMode('none')">閲覧</button>
-          <button class="tool-btn" id="btn-tool-nogo" onclick="setEditMode('nogo')" style="color:var(--danger);">🚫 禁止エリア追加</button>
-          <button class="tool-btn" id="btn-tool-erase" onclick="setEditMode('erase')">🧹 消去</button>
-        </div>
-        <div style="height:20px; border-right:1px solid var(--border); margin:0 4px;"></div>
-        <div class="tool-group">
-          <button class="tool-btn" onclick="clearAllForbiddenZones()">禁止エリアクリア</button>
-          <button class="tool-btn" onclick="saveMapChanges()" style="background:var(--success); color:white; border-color:var(--success);">💾 マップ保存</button>
-        </div>
-      </div>
-
-      <div class="map-wrapper">
-        <canvas id="slamCanvas" width="800" height="360" onmousedown="handleCanvasMouseDown(event)"></canvas>
-      </div>
-    </div>
-
-    <!-- 清掃実績レポート一覧ウィンドウ -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div class="card-header">
-        <div class="card-title">📊 清掃タスク実行レポート・履歴 (Cleaning Reports)</div>
-        <span style="font-size: 0.8rem; color: var(--text-sub);">直近の清掃結果を自動集計しています</span>
-      </div>
-
-      <table class="report-table">
-        <thead>
-          <tr>
-            <th>日時</th>
-            <th>タスク名 / マップ</th>
-            <th>清掃面積</th>
-            <th>所要時間</th>
-            <th>達成率</th>
-            <th>ステータス</th>
-            <th>詳細</th>
-          </tr>
-        </thead>
-        <tbody id="report-table-body">
-        </tbody>
-      </table>
-    </div>
-
-    <!-- コンポーネントステータス診断ウィンドウ -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div class="card-title">コンポーネント・センサー稼働状態診断 (System Diagnostics)</div>
-      <div class="component-grid">
-        <div class="component-card"><span class="comp-name">LiDAR センサー</span><span class="comp-status comp-ok" id="status-lidar">正常</span></div>
-        <div class="component-card"><span class="comp-name">3D 深度カメラ</span><span class="comp-status comp-ok" id="status-camera">正常</span></div>
-        <div class="component-card"><span class="comp-name">走行駆動モータ</span><span class="comp-status comp-ok" id="status-motor">正常</span></div>
-        <div class="component-card"><span class="comp-name">清掃ユニット</span><span class="comp-status comp-ok" id="status-cleaner">正常</span></div>
-        <div class="component-card"><span class="comp-name">汚水タンク</span><span class="comp-status comp-ok" id="status-dirtywater">正常</span></div>
-        <div class="component-card"><span class="comp-name">Wi-Fi 電波強度</span><span class="comp-status comp-ok" id="status-wifi">極めて良好 (-45dBm)</span></div>
-      </div>
-    </div>
-
-    <div class="grid-2" style="margin-bottom: 20px;">
-      <!-- API構成 -->
-      <div class="card">
-        <div class="card-title">API 接続構成 (個別機体用)</div>
-        <div class="form-group">
-          <label>動作モード</label>
-          <select id="mode-select" onchange="toggleMode()">
-            <option value="demo">デモ（シミュレーション走行）</option>
-            <option value="live">本番（Gausium Cloud API）</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>エンドポイント URL</label>
-          <input type="text" id="api-url" value="https://openapi.gs-robot.com" disabled>
-        </div>
-        <div class="form-group">
-          <label>API Token / Key</label>
-          <input type="password" id="api-key" value="demo-token-12345" disabled>
-        </div>
-      </div>
-
-      <!-- リアルタイム稼働ステータスウィンドウ -->
-      <div class="card">
-        <div class="card-title">リアルタイム稼働テレメトリ</div>
-        <div class="metrics-grid">
-          <div class="metric-box">
-            <div class="metric-label">現在座標 / 角度</div>
-            <div class="metric-value" id="val-pose" style="font-size:0.95rem;">X: 0.0m, Y: 0.0m (0°)</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">清掃完了面積</div>
-            <div class="metric-value" id="val-area">0.0 ㎡</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">稼働時間 / 予測駆動時間</div>
-            <div class="metric-value" id="val-time" style="font-size:0.95rem;">0分 / 約 160分</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">清掃モード</div>
-            <div class="metric-value" id="val-mode" style="font-size:0.95rem;">吸引 + 水拭き</div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">バッテリー残量</div>
-            <div class="metric-value" id="val-battery">--%</div>
-            <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-battery"></div></div>
-          </div>
-          <div class="metric-box">
-            <div class="metric-label">浄水タンク残量</div>
-            <div class="metric-value" id="val-water">--%</div>
-            <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-water" style="background:#0284c7;"></div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- コマンド操作 -->
-    <div class="card" style="margin-bottom: 20px;">
-      <div class="card-title">遠隔制御コマンド発行</div>
-      <div class="control-btns">
-        <button class="btn-primary" onclick="sendCommand('START')">▶ 清掃タスク開始</button>
-        <button class="btn-warning" onclick="sendCommand('PAUSE')">⏸ 一時停止</button>
-        <button class="btn-secondary" onclick="sendCommand('DOCK')">🏠 充電ドックへ復帰</button>
-        <button class="btn-danger" onclick="sendCommand('STOP')">⏹ 緊急停止</button>
-      </div>
-    </div>
-
-    <!-- ログ -->
+  <div class="grid-2">
+    <!-- API設定エリア -->
     <div class="card">
-      <div class="card-title">個体通信ログ</div>
-      <div class="log-container" id="log-output">system initialized...</div>
+      <div class="card-title">Gausium Cloud API 接続設定</div>
+      <div class="form-group">
+        <label>動作モード</label>
+        <select id="mode-select" onchange="toggleMode()">
+          <option value="live">本番（Gausium Cloud API連携）</option>
+          <option value="demo">デモ（シミュレーション走行）</option>
+        </select>
+      </div>
+      <div id="api-credentials-group">
+        <div class="form-group">
+          <label>API エンドポイント</label>
+          <input type="text" id="api-base-url" value="https://openapi.gs-robot.com">
+        </div>
+        <div class="form-group">
+          <label>Client ID</label>
+          <input type="text" id="client-id" placeholder="ClientIDを入力">
+        </div>
+        <div class="form-group">
+          <label>Client Secret</label>
+          <input type="password" id="client-secret" placeholder="ClientSecretを入力">
+        </div>
+        <div class="form-group">
+          <label>Open Access Key (Secret)</label>
+          <input type="password" id="open-access-key" placeholder="AccessKeySecretを入力">
+        </div>
+        <button class="btn-primary" style="width: 100%; margin-top: 8px;" onclick="authenticateAndInit()">認証 & ロボット検索</button>
+      </div>
+      
+      <div class="form-group" style="margin-top: 16px;">
+        <label>対象ロボット (Robot ID / Serial)</label>
+        <select id="robot-select" onchange="onRobotSelected()">
+          <option value="">-- ロボットを選択してください --</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 状態データ表示 -->
+    <div class="card">
+      <div class="card-title">リアルタイムステータス</div>
+      <div class="metrics-grid">
+        <div class="metric-box">
+          <div class="metric-label">現在座標 (X, Y) / 角度</div>
+          <div class="metric-value" id="val-pose" style="font-size:1rem;">X: 0.0m, Y: 0.0m (0°)</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">清掃済み面積</div>
+          <div class="metric-value" id="val-area">0.0 ㎡</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">バッテリー残量</div>
+          <div class="metric-value" id="val-battery">--%</div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-battery"></div></div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">浄水タンク残量</div>
+          <div class="metric-value" id="val-water">--%</div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-water" style="background:#0284c7;"></div></div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- 地図位置選択モーダル -->
-<div class="modal-overlay" id="locationModal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3 style="font-size:1.1rem;">📍 地図から設置場所を指定</h3>
-      <button onclick="closeLocationPickerModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer;">✕</button>
-    </div>
-    <div id="locationSelectMap"></div>
-    <div style="margin-top:16px; display:flex; justify-content:space-between; align-items:center;">
-      <span style="font-size:0.85rem; color:var(--text-sub);" id="selected-coords-text">選択位置: 緯度 --, 経度 --</span>
-      <div>
-        <button class="btn-secondary" onclick="closeLocationPickerModal()">キャンセル</button>
-        <button class="btn-primary" onclick="confirmLocationSelection()">設置場所に適用</button>
-      </div>
+  <!-- 操作コマンド -->
+  <div class="card">
+    <div class="card-title">ロボット制御コマンド</div>
+    <div class="control-btns">
+      <button class="btn-primary" onclick="sendCommand('START')">▶ 清掃タスク開始</button>
+      <button class="btn-warning" onclick="sendCommand('PAUSE')">⏸ 一時停止</button>
+      <button class="btn-secondary" onclick="sendCommand('DOCK')">🏠 充電ドックへ復帰</button>
+      <button class="btn-danger" onclick="sendCommand('STOP')">⏹ 緊急停止</button>
     </div>
   </div>
-</div>
 
-<!-- 清掃レポート詳細モーダル -->
-<div class="modal-overlay" id="reportDetailModal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <div>
-        <h3 style="font-size:1.2rem;" id="rpt-modal-title">清掃結果詳細レポート</h3>
-        <p style="font-size:0.85rem; color:var(--text-sub);" id="rpt-modal-date">日時: ----/--/-- --:--</p>
-      </div>
-      <button onclick="closeReportModal()" style="background:none; border:none; font-size:1.2rem; cursor:pointer;">✕</button>
-    </div>
-
-    <div class="report-detail-grid">
-      <div class="report-stat-card">
-        <div class="report-stat-label">清掃完了面積</div>
-        <div class="report-stat-val" id="rpt-modal-area" style="color:var(--primary);">0.0 ㎡</div>
-      </div>
-      <div class="report-stat-card">
-        <div class="report-stat-label">清掃所要時間</div>
-        <div class="report-stat-val" id="rpt-modal-duration">0 分</div>
-      </div>
-      <div class="report-stat-card">
-        <div class="report-stat-label">清掃カバレッジ率</div>
-        <div class="report-stat-val" id="rpt-modal-coverage" style="color:var(--success);">0%</div>
-      </div>
-      <div class="report-stat-card">
-        <div class="report-stat-label">水 / バッテリー消費</div>
-        <div class="report-stat-val" id="rpt-modal-consumption" style="font-size:1rem; margin-top:6px;">水: 0% | 電池: 0%</div>
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px;">
-      <h4 style="font-size:0.9rem; margin-bottom:8px; color:var(--text-sub);">清掃走行軌跡サマリーマップ</h4>
-      <div class="map-wrapper" style="height:260px;">
-        <canvas id="reportSummaryCanvas" width="750" height="260"></canvas>
-      </div>
-    </div>
-
-    <div style="text-align:right;">
-      <button class="btn-secondary" onclick="closeReportModal()">閉じる</button>
-    </div>
+  <!-- 通信ログ -->
+  <div class="card">
+    <div class="card-title">API リクエスト / イベントログ</div>
+    <div class="log-container" id="log-output">システム初期化完了。Credentialsを入力して認証を実行してください。</div>
   </div>
 </div>
-
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-  // 初期データ（クラウドAPI通信未接続時/デモ用のフォールバックデータ）
-  let fleet = [
-    {
-      id: 'GS-Phantas-01',
-      name: 'Phantas-01 (東京丸の内)',
-      location: '東京都千代田区 丸の内1-1',
-      mapName: '1F_オフィスエリア.map',
-      status: 'WORKING',
-      action: '定期水拭き清掃中',
-      battery: 76,
-      water: 68,
-      cleanedArea: 142.5,
-      workingTimeMinutes: 45,
-      pose: { x: 4.5, y: 5.2, angle: 45 },
-      latLng: [35.681236, 139.767125],
-      mode: 'demo',
-      isCleaning: true,
-      forbiddenZones: [],
-      alertMessage: null,
-      reports: [
-        {
-          id: 'RPT-20260721-01',
-          dateTime: '2026/07/21 14:00 - 14:45',
-          taskName: '1F メインフロア全面清掃',
-          mapName: '1F_オフィスエリア.map',
-          cleanedArea: 185.0,
-          durationMinutes: 45,
-          coverage: 100,
-          status: 'COMPLETED',
-          waterConsumed: 32,
-          batteryConsumed: 22
-        }
-      ]
-    },
-    {
-      id: 'GS-Phantas-02',
-      name: 'Phantas-02 (大阪梅田)',
-      location: '大阪府大阪市北区 梅田1-1',
-      mapName: '2F_会議室フロア.map',
-      status: 'CHARGING',
-      action: '自動充電ドック待機',
-      battery: 98,
-      water: 100,
-      cleanedArea: 89.0,
-      workingTimeMinutes: 120,
-      pose: { x: 3.0, y: 3.0, angle: 0 },
-      latLng: [34.702485, 135.495951],
-      mode: 'demo',
-      isCleaning: false,
-      forbiddenZones: [],
-      alertMessage: null,
-      reports: [
-        {
-          id: 'RPT-20260721-02',
-          dateTime: '2026/07/21 09:00 - 09:35',
-          taskName: '大ホール吸引清掃',
-          mapName: '2F_会議室フロア.map',
-          cleanedArea: 120.0,
-          durationMinutes: 35,
-          coverage: 98,
-          status: 'COMPLETED',
-          waterConsumed: 0,
-          batteryConsumed: 16
-        }
-      ]
-    },
-    {
-      id: 'GS-Phantas-03',
-      name: 'Phantas-03 (福岡天神)',
-      location: '福岡県福岡市中央区 天神1-1',
-      mapName: '1F_エントランス.map',
-      status: 'ALERT',
-      action: '汚水タンク満水停止',
-      battery: 32,
-      water: 10,
-      cleanedArea: 210.0,
-      workingTimeMinutes: 180,
-      pose: { x: 2.5, y: 3.0, angle: 90 },
-      latLng: [33.590355, 130.401716],
-      mode: 'demo',
-      isCleaning: false,
-      forbiddenZones: [],
-      alertMessage: '⚠️ 汚水タンクが満水です。手動排水を行ってください。',
-      reports: []
-    }
-  ];
+  // 状態保持用オブジェクト
+  let state = {
+    mode: 'live',
+    accessToken: null,
+    selectedRobotId: null,
+    status: 'OFFLINE',
+    battery: 0,
+    water: 0,
+    action: '未接続',
+    pose: { x: 3.0, y: 3.0, angle: 0 },
+    cleanedArea: 0.0,
+    mapName: '--',
+    isCleaning: false
+  };
 
-  let selectedRobotId = null;
-  let canvas, ctx, pollingTimer = null;
-  let cleanedPathHistory = [];
-  let customMapImage = null;
-  let currentEditTool = 'none';
-
-  let japanMap = null, japanMarkers = [];
-  let pickerMap = null, pickerMarker = null, tempLatLng = null;
-
+  // デモモード用設定
   const demoPath = [
-    { x: 3.0, y: 3.0, angle: 0 },
-    { x: 12.0, y: 3.0, angle: 90 },
-    { x: 12.0, y: 6.0, angle: 180 },
-    { x: 3.0, y: 6.0, angle: 90 },
-    { x: 3.0, y: 3.0, angle: 0 }
+    { x: 3.0, y: 3.0, angle: 0 }, { x: 12.0, y: 3.0, angle: 90 },
+    { x: 12.0, y: 6.0, angle: 180 }, { x: 3.0, y: 6.0, angle: 90 },
+    { x: 3.0, y: 9.0, angle: 0 }, { x: 12.0, y: 9.0, angle: 270 }
   ];
   let demoPathIndex = 0;
+  let cleanedPathHistory = [];
+
+  let canvas, ctx, pollingTimer = null;
 
   window.onload = () => {
     canvas = document.getElementById('slamCanvas');
-    if (canvas) ctx = canvas.getContext('2d');
-    renderFleetList();
-    startFleetPolling();
+    ctx = canvas.getContext('2d');
+    drawSlamMap();
   };
 
-  // 【新規追加機能】Gausium Cloud API (/v1alpha1/robots) から機器一覧を取得
-  async function fetchGausiumFleetFromCloud() {
-    const apiUrl = document.getElementById('global-api-url').value.replace(/\/$/, "");
-    const apiToken = document.getElementById('global-api-token').value;
-    const msgLabel = document.getElementById('api-status-msg');
+  function toggleMode() {
+    state.mode = document.getElementById('mode-select').value;
+    const credGroup = document.getElementById('api-credentials-group');
+    
+    if (state.mode === 'demo') {
+      credGroup.style.display = 'none';
+      state.selectedRobotId = 'Phantas-DEMO-01';
+      document.getElementById('display-robot-id').innerText = state.selectedRobotId;
+      log("【デモモード】に切り替えました。");
+      startPolling();
+    } else {
+      credGroup.style.display = 'block';
+      if (pollingTimer) clearInterval(pollingTimer);
+      log("【本番モード】に切り替えました。認証を実行してください。");
+    }
+  }
 
-    msgLabel.innerText = "⏳ Gausium Cloudと通信中...";
-    msgLabel.style.color = "var(--primary)";
+  // --- 1. OAuth 2.0 アクセストークンの取得 ---
+  async function authenticateAndInit() {
+    const baseUrl = document.getElementById('api-base-url').value.trim();
+    const clientId = document.getElementById('client-id').value.trim();
+    const clientSecret = document.getElementById('client-secret').value.trim();
+    const openAccessKey = document.getElementById('open-access-key').value.trim();
+
+    if (!clientId || !clientSecret || !openAccessKey) {
+      alert("すべての認証情報キーを入力してください。");
+      return;
+    }
+
+    log("[API] OAuth 2.0 アクセストークンをリクエスト中...");
 
     try {
-      const response = await fetch(`${apiUrl}/v1alpha1/robots`, {
+      const response = await fetch(`${baseUrl}/gas/api/v1alpha1/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: "urn:gaussian:params:oauth:grant-type:open-access-token",
+          client_id: clientId,
+          client_secret: clientSecret,
+          open_access_key: openAccessKey
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.access_token) {
+        throw new Error(data.error_description || data.message || "認証エラー");
+      }
+
+      state.accessToken = data.access_token.replace(/\r?\n/g, "").trim();
+      log("[API] 認証成功！ アクセストークンを取得しました。");
+
+      // トークン取得後にロボット一覧を検索
+      await fetchRobotList();
+
+    } catch (err) {
+      log(`[ERROR] 認証失敗: ${err.message}`);
+      alert(`認証に失敗しました: ${err.message}`);
+    }
+  }
+
+  // --- 2. 機器一覧（Robots List）の取得 ---
+  async function fetchRobotList() {
+    const baseUrl = document.getElementById('api-base-url').value.trim();
+    log("[API] 登録ロボット一覧を検索中 (`/v1alpha1/robots?page=1&page_size=10`)...");
+
+    try {
+      const response = await fetch(`${baseUrl}/v1alpha1/robots?page=1&page_size=10`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${apiToken}`,
+          'Authorization': `Bearer ${state.accessToken}`,
           'Content-Type': 'application/json'
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-
       const data = await response.json();
-      msgLabel.innerText = "✅ クラウド機器一覧の取得に成功しました";
-      msgLabel.style.color = "var(--success)";
+      const robotSelect = document.getElementById('robot-select');
+      robotSelect.innerHTML = '';
 
-      // クラウドの機器レスポンスデータをフロントエンドモデルにマッピング
-      if (data && (data.robots || Array.isArray(data))) {
-        const rawRobots = data.robots || data;
-        
-        fleet = rawRobots.map((item, idx) => {
-          return {
-            id: item.robot_id || item.id || `GS-Phantas-${idx+1}`,
-            name: item.name || item.robot_name || `Phantas-${item.robot_id || idx+1}`,
-            location: item.location_name || item.site || '未設定拠点',
-            mapName: item.current_map || 'default_floor.map',
-            status: item.status || 'ONLINE',
-            action: item.current_task || '待機中',
-            battery: item.battery_level !== undefined ? item.battery_level : 85,
-            water: item.water_level !== undefined ? item.water_level : 90,
-            cleanedArea: item.today_cleaned_area || 0.0,
-            workingTimeMinutes: item.today_work_time || 0,
-            pose: item.pose || { x: 3.0, y: 3.0, angle: 0 },
-            latLng: item.lat_lng || [35.681236 + (idx * 0.05), 139.767125 + (idx * 0.05)],
-            mode: 'live',
-            isCleaning: item.status === 'WORKING',
-            forbiddenZones: [],
-            alertMessage: item.alert || null,
-            reports: []
-          };
+      if (data.robots && data.robots.length > 0) {
+        data.robots.forEach((robot, idx) => {
+          const opt = document.createElement('option');
+          opt.value = robot.id || robot.serial_number;
+          opt.innerText = `${robot.name || 'Phantas'} (${opt.value})`;
+          robotSelect.appendChild(opt);
         });
-
-        renderFleetList();
-        if (document.getElementById('fleet-tab-map').classList.contains('active')) {
-          renderJapanOverviewMap();
-        }
+        
+        onRobotSelected();
+        log(`[API] ${data.robots.length} 台のロボットを発見しました。`);
+        startPolling();
+      } else {
+        const opt = document.createElement('option');
+        opt.value = "";
+        opt.innerText = "ロボットが見つかりません (0件)";
+        robotSelect.appendChild(opt);
+        log("[WARN] API疎通成功。ただしアカウントにバインドされたロボットが0件です。");
       }
+
     } catch (err) {
-      console.warn("API取得エラーのためフォールバック実行:", err);
-      msgLabel.innerText = `⚠️ クラウド通信不可 (CORS制限等): ローカル環境・プロキシ設定を確認してください [${err.message}]`;
-      msgLabel.style.color = "var(--warning)";
+      log(`[ERROR] ロボット一覧取得失敗: ${err.message}`);
     }
   }
 
-  function switchFleetTab(tab) {
-    document.getElementById('tab-btn-card').className = tab === 'card' ? 'tab-btn active' : 'tab-btn';
-    document.getElementById('tab-btn-map').className = tab === 'map' ? 'tab-btn active' : 'tab-btn';
-
-    document.getElementById('fleet-tab-card').className = tab === 'card' ? 'fleet-tab-content active' : 'fleet-tab-content';
-    document.getElementById('fleet-tab-map').className = tab === 'map' ? 'fleet-tab-content active' : 'fleet-tab-content';
-
-    if (tab === 'map') renderJapanOverviewMap();
+  function onRobotSelected() {
+    const select = document.getElementById('robot-select');
+    state.selectedRobotId = select.value;
+    document.getElementById('display-robot-id').innerText = state.selectedRobotId || '未選択';
   }
 
-  function renderJapanOverviewMap() {
-    setTimeout(() => {
-      if (!japanMap) {
-        japanMap = L.map('japanOverviewMap').setView([36.0, 137.5], 5);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap'
-        }).addTo(japanMap);
-      } else {
-        japanMap.invalidateSize();
+  // --- 3. リアルタイムステータスの定期取得 (ポーリング) ---
+  function startPolling() {
+    if (pollingTimer) clearInterval(pollingTimer);
+    pollingTimer = setInterval(() => {
+      fetchStatus();
+    }, 2000); // 2秒周期
+  }
+
+  async function fetchStatus() {
+    if (!state.selectedRobotId && state.mode === 'live') return;
+
+    if (state.mode === 'live') {
+      const baseUrl = document.getElementById('api-base-url').value.trim();
+
+      try {
+        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${state.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.pose) {
+            state.pose = data.pose;
+            cleanedPathHistory.push({ x: state.pose.x, y: state.pose.y });
+          }
+          if (data.map_name) state.mapName = data.map_name;
+          updateUI(data);
+        }
+      } catch (err) {
+        log(`[ERROR] テレメトリ取得エラー: ${err.message}`);
       }
+    } else {
+      // デモシミュレーション処理
+      if (state.isCleaning) {
+        const target = demoPath[demoPathIndex];
+        const dx = target.x - state.pose.x;
+        const dy = target.y - state.pose.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-      japanMarkers.forEach(m => japanMap.removeLayer(m));
-      japanMarkers = [];
+        if (dist < 0.2) {
+          demoPathIndex = (demoPathIndex + 1) % demoPath.length;
+        } else {
+          state.pose.x += (dx / dist) * 0.3;
+          state.pose.y += (dy / dist) * 0.3;
+          state.pose.angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        }
 
-      fleet.forEach(robot => {
-        if (!robot.latLng) return;
-        const marker = L.marker(robot.latLng).addTo(japanMap);
-        const popupContent = `
-          <div style="font-family:sans-serif; min-width:180px;">
-            <strong style="font-size:14px; color:#2563eb;">${robot.name}</strong><br>
-            <span style="font-size:12px; color:#666;">📍 ${robot.location}</span><hr style="margin:6px 0; border:none; border-top:1px solid #eee;">
-            <div style="font-size:12px; margin-bottom:8px;">
-              バッテリー: <b>${Math.round(robot.battery)}%</b> | タンク: <b>${Math.round(robot.water)}%</b>
-            </div>
-            <button onclick="drillDownDetail('${robot.id}')" style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; font-size:12px; cursor:pointer; width:100%;">
-              詳細・操作画面へ →
-            </button>
-          </div>
-        `;
-        marker.bindPopup(popupContent);
-        japanMarkers.push(marker);
+        cleanedPathHistory.push({ x: state.pose.x, y: state.pose.y });
+        state.cleanedArea += 0.3;
+        state.battery = Math.max(0, state.battery - 0.05);
+        state.water = Math.max(0, state.water - 0.08);
+      }
+      updateUI({
+        battery: state.battery,
+        water: state.water,
+        status: state.isCleaning ? 'WORKING' : 'ONLINE',
+        action: state.isCleaning ? '清掃走行中' : '待機中'
       });
-    }, 150);
+    }
+
+    drawSlamMap();
   }
 
-  function renderReportTable(robot) {
-    const tableBody = document.getElementById('report-table-body');
-    if (!tableBody) return;
-    tableBody.innerHTML = '';
-
-    if (!robot.reports || robot.reports.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-sub);">清掃レポート履歴がありません</td></tr>`;
+  // --- 4. 遠隔制御コマンドの送信 (START, PAUSE, DOCK, STOP) ---
+  async function sendCommand(action) {
+    if (!state.selectedRobotId) {
+      alert("対象のロボットが選択されていません。");
       return;
     }
 
-    robot.reports.forEach(rpt => {
-      const isCompleted = rpt.status === 'COMPLETED';
-      const badgeClass = isCompleted ? 'report-success' : 'report-partial';
-      const badgeText = isCompleted ? '完了' : '途中終了';
+    log(`[SEND] 指示送信: ${action} -> ${state.selectedRobotId}`);
 
-      const rowHtml = `
-        <tr>
-          <td><strong>${rpt.dateTime}</strong></td>
-          <td>${rpt.taskName}</td>
-          <td>${rpt.cleanedArea.toFixed(1)} ㎡</td>
-          <td>${rpt.durationMinutes} 分</td>
-          <td>${rpt.coverage}%</td>
-          <td><span class="report-badge ${badgeClass}">${badgeText}</span></td>
-          <td>
-            <button onclick="openReportDetailModal('${rpt.id}')" style="background:var(--primary); color:white; border:none; padding:4px 10px; border-radius:4px; font-size:0.75rem; cursor:pointer;">
-              📄 詳細表示
-            </button>
-          </td>
-        </tr>
-      `;
-      tableBody.innerHTML += rowHtml;
-    });
-  }
+    if (state.mode === 'live') {
+      const baseUrl = document.getElementById('api-base-url').value.trim();
 
-  function openReportDetailModal(reportId) {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (!robot) return;
-    const rpt = robot.reports.find(r => r.id === reportId);
-    if (!rpt) return;
-
-    document.getElementById('rpt-modal-title').innerText = `${robot.name} - ${rpt.taskName}`;
-    document.getElementById('rpt-modal-date').innerText = `実行日時: ${rpt.dateTime} | マップ: ${rpt.mapName}`;
-    document.getElementById('rpt-modal-area').innerText = `${rpt.cleanedArea.toFixed(1)} ㎡`;
-    document.getElementById('rpt-modal-duration').innerText = `${rpt.durationMinutes} 分`;
-    document.getElementById('rpt-modal-coverage').innerText = `${rpt.coverage}%`;
-    document.getElementById('rpt-modal-consumption').innerText = `水: -${rpt.waterConsumed}% | 電池: -${rpt.batteryConsumed}%`;
-
-    document.getElementById('reportDetailModal').classList.add('active');
-
-    setTimeout(() => {
-      const rCanvas = document.getElementById('reportSummaryCanvas');
-      if (rCanvas) {
-        const rCtx = rCanvas.getContext('2d');
-        rCtx.fillStyle = '#0f172a'; rCtx.fillRect(0, 0, rCanvas.width, rCanvas.height);
-        rCtx.fillStyle = '#1e293b'; rCtx.fillRect(30, 20, rCanvas.width - 60, rCanvas.height - 40);
-        rCtx.fillStyle = 'rgba(37, 99, 235, 0.4)';
-        rCtx.fillRect(50, 40, (rCanvas.width - 100) * (rpt.coverage / 100), rCanvas.height - 80);
-      }
-    }, 100);
-  }
-
-  function closeReportModal() {
-    document.getElementById('reportDetailModal').classList.remove('active');
-  }
-
-  function openLocationPickerModal() {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (!robot) return;
-
-    document.getElementById('locationModal').classList.add('active');
-    const defaultPos = robot.latLng || [35.681236, 139.767125];
-    tempLatLng = defaultPos;
-
-    setTimeout(() => {
-      if (!pickerMap) {
-        pickerMap = L.map('locationSelectMap').setView(defaultPos, 16);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(pickerMap);
-        pickerMarker = L.marker(defaultPos, { draggable: true }).addTo(pickerMap);
-
-        pickerMarker.on('dragend', function() {
-          const position = pickerMarker.getLatLng();
-          updatePickerCoordText(position.lat, position.lng);
+      try {
+        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${state.accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ command: action })
         });
-        pickerMap.on('click', function(e) {
-          pickerMarker.setLatLng(e.latlng);
-          updatePickerCoordText(e.latlng.lat, e.latlng.lng);
-        });
-      } else {
-        pickerMap.setView(defaultPos, 16);
-        pickerMarker.setLatLng(defaultPos);
-        pickerMap.invalidateSize();
+
+        const resData = await response.json();
+        log(`[RECV] 応答: ${JSON.stringify(resData)}`);
+      } catch (err) {
+        log(`[ERROR] 指示送信失敗: ${err.message}`);
       }
-      updatePickerCoordText(defaultPos[0], defaultPos[1]);
-    }, 200);
-  }
-
-  function updatePickerCoordText(lat, lng) {
-    tempLatLng = [lat, lng];
-    document.getElementById('selected-coords-text').innerText = `選択位置: 緯度 ${lat.toFixed(6)}, 経度 ${lng.toFixed(6)}`;
-  }
-
-  function closeLocationPickerModal() {
-    document.getElementById('locationModal').classList.remove('active');
-  }
-
-  function confirmLocationSelection() {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (robot && tempLatLng) {
-      robot.latLng = tempLatLng;
-      document.getElementById('robot-loc-input').value = robot.location;
-      log(`[MAP] 設置場所の経緯度座標を同期・更新しました。`);
-    }
-    closeLocationPickerModal();
-  }
-
-  function updateLocationText() {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (robot) {
-      robot.location = document.getElementById('robot-loc-input').value;
-      log(`[INFO] 設置場所を「${robot.location}」に変更しました。`);
-    }
-  }
-
-  function loadCustomMapImage(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const img = new Image();
-      img.onload = function() {
-        customMapImage = img;
-        const robot = fleet.find(r => r.id === selectedRobotId);
-        if (robot) {
-          robot.mapName = file.name;
-          document.getElementById('map-name-display').innerText = file.name;
-          drawSlamMap(robot);
-          log(`[MAP] マップ画像 [${file.name}] をロード完了。`);
-        }
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function setEditMode(mode) {
-    currentEditTool = mode;
-    document.getElementById('btn-tool-none').className = mode === 'none' ? 'tool-btn active' : 'tool-btn';
-    document.getElementById('btn-tool-nogo').className = mode === 'nogo' ? 'tool-btn active' : 'tool-btn';
-    document.getElementById('btn-tool-erase').className = mode === 'erase' ? 'tool-btn active' : 'tool-btn';
-  }
-
-  function handleCanvasMouseDown(event) {
-    if (currentEditTool === 'none' || !selectedRobotId) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const clickX = event.clientX - rect.left;
-    const clickY = event.clientY - rect.top;
-
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (!robot) return;
-
-    if (currentEditTool === 'nogo') {
-      robot.forbiddenZones.push({ x: clickX, y: clickY, radius: 18 });
-      log(`[MAP EDIT] 禁止領域を追加: (X:${Math.round(clickX)}, Y:${Math.round(clickY)})`);
-    } else if (currentEditTool === 'erase') {
-      robot.forbiddenZones = robot.forbiddenZones.filter(zone => Math.hypot(zone.x - clickX, zone.y - clickY) > 20);
-      log(`[MAP EDIT] 禁止領域を消去しました。`);
-    }
-
-    drawSlamMap(robot);
-  }
-
-  function clearAllForbiddenZones() {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (robot) {
-      robot.forbiddenZones = [];
-      drawSlamMap(robot);
-      log(`[MAP EDIT] 禁止領域を全クリアしました。`);
-    }
-  }
-
-  function saveMapChanges() {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (robot) {
-      log(`[API] マップ修正データを保存・送信しました。`);
-      alert("マップの修正内容をPhantasへ同期・保存しました。");
-    }
-  }
-
-  function renderFleetList() {
-    const container = document.getElementById('robot-cards-container');
-    if (!container) return;
-    container.innerHTML = '';
-    let workingCount = 0;
-
-    fleet.forEach(robot => {
-      if (robot.status === 'WORKING') workingCount++;
-
-      let badgeClass = 'status-online', badgeText = '● オンライン';
-      if (robot.status === 'WORKING') { badgeClass = 'status-working'; badgeText = '● 清掃中'; }
-      else if (robot.status === 'CHARGING') { badgeClass = 'status-charging'; badgeText = '⚡ 充電中'; }
-      else if (robot.status === 'ALERT') { badgeClass = 'status-alert'; badgeText = '⚠️ 警告発生'; }
-
-      const cardHtml = `
-        <div class="robot-card" onclick="drillDownDetail('${robot.id}')">
-          <div class="robot-card-header">
-            <div>
-              <div class="robot-name">${robot.name}</div>
-              <div class="robot-loc">📍 ${robot.location}</div>
-            </div>
-            <span class="status-badge ${badgeClass}">${badgeText}</span>
-          </div>
-
-          ${robot.alertMessage ? `<div style="background:#fef2f2; color:#991b1b; padding:6px 10px; border-radius:6px; font-size:0.75rem; margin-bottom:10px;">${robot.alertMessage}</div>` : ''}
-
-          <div class="card-metrics">
-            <div class="mini-metric">
-              <div class="mini-metric-label">バッテリー</div>
-              <div class="mini-metric-val">${Math.round(robot.battery)}%</div>
-              <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${robot.battery}%"></div></div>
-            </div>
-            <div class="mini-metric">
-              <div class="mini-metric-label">浄水タンク</div>
-              <div class="mini-metric-val">${Math.round(robot.water)}%</div>
-              <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${robot.water}%; background:#0284c7;"></div></div>
-            </div>
-          </div>
-
-          <div class="card-footer">
-            <span style="color:var(--text-sub);">現在状態: <strong>${robot.action}</strong></span>
-            <span style="color:var(--primary); font-weight:600;">詳細・操作 →</span>
-          </div>
-        </div>
-      `;
-      container.innerHTML += cardHtml;
-    });
-
-    document.getElementById('total-count').innerText = fleet.length;
-    document.getElementById('working-count').innerText = workingCount;
-    document.getElementById('last-sync-time').innerText = new Date().toLocaleTimeString();
-  }
-
-  function drillDownDetail(robotId) {
-    selectedRobotId = robotId;
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (!robot) return;
-
-    document.getElementById('view-list').classList.remove('active');
-    document.getElementById('view-detail').classList.add('active');
-
-    document.getElementById('detail-robot-name').innerText = robot.name;
-    document.getElementById('detail-robot-id-display').innerText = `ID: ${robot.id}`;
-    document.getElementById('robot-loc-input').value = robot.location;
-    document.getElementById('map-name-display').innerText = robot.mapName;
-
-    cleanedPathHistory = [{ x: robot.pose.x, y: robot.pose.y }];
-    log(`ロボット [${robot.id}] の詳細・操作画面を開きました。`);
-    
-    renderReportTable(robot);
-    updateDetailUI(robot);
-    drawSlamMap(robot);
-  }
-
-  function showListView() {
-    selectedRobotId = null;
-    customMapImage = null;
-    document.getElementById('view-detail').classList.remove('active');
-    document.getElementById('view-list').classList.add('active');
-    renderFleetList();
-    if (document.getElementById('fleet-tab-map').classList.contains('active')) {
-      renderJapanOverviewMap();
-    }
-  }
-
-  function startFleetPolling() {
-    if (pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = setInterval(() => {
-      fleet.forEach(robot => {
-        if (robot.isCleaning) {
-          robot.battery = Math.max(0, robot.battery - 0.08);
-          robot.water = Math.max(0, robot.water - 0.1);
-          robot.cleanedArea += 0.2;
-          robot.workingTimeMinutes += 0.05;
-
-          if (robot.id === selectedRobotId) {
-            const target = demoPath[demoPathIndex];
-            const dx = target.x - robot.pose.x, dy = target.y - robot.pose.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < 0.2) {
-              demoPathIndex = (demoPathIndex + 1) % demoPath.length;
-            } else {
-              robot.pose.x += (dx / dist) * 0.3;
-              robot.pose.y += (dy / dist) * 0.3;
-              robot.pose.angle = Math.atan2(dy, dx) * (180 / Math.PI);
-            }
-            cleanedPathHistory.push({ x: robot.pose.x, y: robot.pose.y });
-          }
-        }
-      });
-
-      if (selectedRobotId) {
-        const activeRobot = fleet.find(r => r.id === selectedRobotId);
-        if (activeRobot) {
-          updateDetailUI(activeRobot);
-          drawSlamMap(activeRobot);
-        }
-      } else {
-        renderFleetList();
+    } else {
+      // デモ切り替え
+      switch (action) {
+        case 'START':
+          state.isCleaning = true;
+          state.action = '清掃走行中';
+          break;
+        case 'PAUSE':
+        case 'STOP':
+          state.isCleaning = false;
+          state.action = '停止中';
+          break;
+        case 'DOCK':
+          state.isCleaning = false;
+          state.action = 'ドック帰還中';
+          state.pose = { x: 3.0, y: 3.0, angle: 0 };
+          break;
       }
-    }, 1500);
+      log(`[SIM] 状態更新: ${state.action}`);
+    }
   }
 
-  function updateDetailUI(robot) {
+  // --- 5. UIおよびキャンバスの描画処理 ---
+  function updateUI(data) {
+    document.getElementById('map-name-display').innerText = state.mapName || '1F_メインエリア';
     document.getElementById('val-pose').innerText = 
-      `X: ${robot.pose.x.toFixed(1)}m, Y: ${robot.pose.y.toFixed(1)}m (${Math.round(robot.pose.angle)}°)`;
-    document.getElementById('val-area').innerText = `${robot.cleanedArea.toFixed(1)} ㎡`;
-    document.getElementById('val-time').innerText = `${Math.floor(robot.workingTimeMinutes)}分 / 約 ${(robot.battery * 2.2).toFixed(0)}分`;
+      `X: ${state.pose.x.toFixed(1)}m, Y: ${state.pose.y.toFixed(1)}m (${Math.round(state.pose.angle)}°)`;
+    document.getElementById('val-area').innerText = `${state.cleanedArea.toFixed(1)} ㎡`;
 
-    document.getElementById('val-battery').innerText = `${Math.round(robot.battery)}%`;
-    document.getElementById('bar-battery').style.width = `${robot.battery}%`;
+    const battery = Math.round(data.battery || 0);
+    document.getElementById('val-battery').innerText = `${battery}%`;
+    document.getElementById('bar-battery').style.width = `${battery}%`;
 
-    document.getElementById('val-water').innerText = `${Math.round(robot.water)}%`;
-    document.getElementById('bar-water').style.width = `${robot.water}%`;
+    const water = Math.round(data.water || 0);
+    document.getElementById('val-water').innerText = `${water}%`;
+    document.getElementById('bar-water').style.width = `${water}%`;
 
-    const alertBanner = document.getElementById('alert-banner');
-    const dirtyWaterStatus = document.getElementById('status-dirtywater');
-
-    if (robot.alertMessage || robot.water < 15) {
-      alertBanner.className = 'alert-box alert-warning';
-      alertBanner.innerHTML = robot.alertMessage || '⚠️ <strong>警告:</strong> 浄水タンク残量が低下しています。給水してください。';
-      if (dirtyWaterStatus) {
-        dirtyWaterStatus.className = 'comp-status comp-warn';
-        dirtyWaterStatus.innerText = '点検要';
-      }
+    if (data.status === 'WORKING') {
+      updateStatusBadge('status-working', '● 清掃実行中');
+    } else if (data.status === 'CHARGING') {
+      updateStatusBadge('status-charging', '⚡ 充電中');
+    } else if (data.status === 'ONLINE') {
+      updateStatusBadge('status-online', '● オンライン');
     } else {
-      alertBanner.className = 'alert-box alert-normal';
-      alertBanner.innerHTML = '✅ システム正常操作中: アラートやエラーは検知されていません';
-      if (dirtyWaterStatus) {
-        dirtyWaterStatus.className = 'comp-status comp-ok';
-        dirtyWaterStatus.innerText = '正常';
-      }
-    }
-
-    const badge = document.getElementById('detail-status-badge');
-    if (robot.status === 'WORKING') {
-      badge.className = 'status-badge status-working'; badge.innerText = '● 清掃実行中';
-    } else if (robot.status === 'CHARGING') {
-      badge.className = 'status-badge status-charging'; badge.innerText = '⚡ 充電中';
-    } else if (robot.status === 'ALERT') {
-      badge.className = 'status-badge status-alert'; badge.innerText = '⚠️ アラート発生中';
-    } else {
-      badge.className = 'status-badge status-online'; badge.innerText = '● オンライン';
+      updateStatusBadge('status-offline', '● オフライン');
     }
   }
 
-  function drawSlamMap(robot) {
-    if (!ctx) return;
-    const w = canvas.width, h = canvas.height, scale = 25;
+  function updateStatusBadge(className, text) {
+    const badge = document.getElementById('status-badge');
+    badge.className = `status-badge ${className}`;
+    badge.innerText = text;
+  }
 
-    if (customMapImage) {
-      ctx.drawImage(customMapImage, 0, 0, w, h);
-    } else {
-      ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#1e293b'; ctx.fillRect(50, 40, w - 100, h - 80);
-      ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.strokeRect(50, 40, w - 100, h - 80);
+  function drawSlamMap() {
+    const w = canvas.width;
+    const h = canvas.height;
+    const scale = 25;
 
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(180, 90, 120, 30);
-      ctx.fillRect(450, 90, 150, 30);
-    }
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, w, h);
 
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(50, 50, w - 100, h - 100);
+
+    ctx.fillStyle = '#000000';
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(50, 50, w - 100, h - 100);
+    ctx.fillRect(180, 120, 120, 30);
+    ctx.fillRect(450, 120, 150, 30);
+
+    // 清掃軌跡
     if (cleanedPathHistory.length > 1) {
       ctx.fillStyle = 'rgba(37, 99, 235, 0.35)';
       for (let p of cleanedPathHistory) {
-        ctx.beginPath(); ctx.arc(50 + p.x * scale, 40 + p.y * scale, 16, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-
-    if (robot.forbiddenZones && robot.forbiddenZones.length > 0) {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.6)';
-      ctx.strokeStyle = '#ef4444';
-      ctx.lineWidth = 2;
-
-      for (let zone of robot.forbiddenZones) {
+        let px = 50 + p.x * scale;
+        let py = 50 + p.y * scale;
         ctx.beginPath();
-        ctx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, 18, 0, Math.PI * 2);
         ctx.fill();
-        ctx.stroke();
       }
     }
 
+    // 充電ドック
+    const dockX = 50 + 3.0 * scale;
+    const dockY = 50 + 3.0 * scale;
     ctx.fillStyle = '#10b981';
-    ctx.fillRect(50 + 3.0 * scale - 10, 40 + 3.0 * scale - 10, 20, 20);
+    ctx.fillRect(dockX - 12, dockY - 12, 24, 24);
 
-    const rx = 50 + robot.pose.x * scale, ry = 40 + robot.pose.y * scale;
+    // ロボット描画
+    const rx = 50 + state.pose.x * scale;
+    const ry = 50 + state.pose.y * scale;
+
     ctx.save();
     ctx.translate(rx, ry);
-    ctx.rotate((robot.pose.angle * Math.PI) / 180);
-    ctx.fillStyle = '#2563eb';
-    ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-4, -5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
+    ctx.rotate((state.pose.angle * Math.PI) / 180);
+
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-5, -6);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.fill();
+
     ctx.restore();
-  }
-
-  function sendCommand(action) {
-    const robot = fleet.find(r => r.id === selectedRobotId);
-    if (!robot) return;
-
-    log(`[SEND] 指示送信: ${action} -> ${robot.id}`);
-    setTimeout(() => {
-      switch (action) {
-        case 'START': robot.status = 'WORKING'; robot.action = '清掃実行中'; robot.isCleaning = true; break;
-        case 'PAUSE': robot.status = 'ONLINE'; robot.action = '一時停止'; robot.isCleaning = false; break;
-        case 'DOCK':
-          if (robot.isCleaning) {
-            const newReport = {
-              id: `RPT-${Date.now()}`,
-              dateTime: new Date().toLocaleString(),
-              taskName: '遠隔コマンド実行清掃',
-              mapName: robot.mapName,
-              cleanedArea: robot.cleanedArea,
-              durationMinutes: Math.floor(robot.workingTimeMinutes),
-              coverage: 100,
-              status: 'COMPLETED',
-              waterConsumed: 25,
-              batteryConsumed: 20
-            };
-            if (!robot.reports) robot.reports = [];
-            robot.reports.unshift(newReport);
-            renderReportTable(robot);
-            log(`[REPORT] 清掃タスク完了レポート [${newReport.id}] を新規保存しました。`);
-          }
-          robot.status = 'CHARGING'; robot.action = 'ドック復帰中'; robot.isCleaning = false; robot.pose = { x: 3.0, y: 3.0, angle: 0 }; break;
-        case 'STOP': robot.status = 'ONLINE'; robot.action = '緊急停止'; robot.isCleaning = false; break;
-      }
-      log(`[SIM] ステータス更新: ${robot.action}`);
-      updateDetailUI(robot);
-    }, 300);
-  }
-
-  function toggleMode() {
-    const mode = document.getElementById('mode-select').value;
-    document.getElementById('api-url').disabled = (mode === 'demo');
-    document.getElementById('api-key').disabled = (mode === 'demo');
-    log(`動作モードを [${mode.toUpperCase()}] に切り替えました。`);
   }
 
   function log(msg) {
     const logBox = document.getElementById('log-output');
-    if (!logBox) return;
     const time = new Date().toLocaleTimeString();
     logBox.innerText = `[${time}] ${msg}\n` + logBox.innerText;
   }
