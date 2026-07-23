@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gausium Phantas コントロールパネル (API連携版)</title>
+  <title>Gausium Phantas コントロールパネル (API連携完全版)</title>
   
   <style>
     :root {
@@ -197,7 +197,7 @@
       font-size: 0.85rem;
       padding: 12px;
       border-radius: 8px;
-      height: 140px;
+      height: 160px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
@@ -250,7 +250,7 @@
           <input type="text" id="api-base-url" value="https://openapi.gs-robot.com">
         </div>
         <div class="form-group">
-          <label>Client ID</label>
+          <label>Client ID (AppKey)</label>
           <input type="text" id="client-id" placeholder="ClientIDを入力">
         </div>
         <div class="form-group">
@@ -260,6 +260,14 @@
         <div class="form-group">
           <label>Open Access Key (Secret)</label>
           <input type="password" id="open-access-key" placeholder="AccessKeySecretを入力">
+        </div>
+        <div class="form-group">
+          <label>通信モード (CORS回避プロキシ)</label>
+          <select id="proxy-select">
+            <option value="corsproxy">Corsproxy 経由 (推奨)</option>
+            <option value="thingproxy">Thingproxy 経由</option>
+            <option value="direct">直接接続 (Allow-CORS拡張機能等を使用時)</option>
+          </select>
         </div>
         <button class="btn-primary" style="width: 100%; margin-top: 8px;" onclick="authenticateAndInit()">認証 & ロボット検索</button>
       </div>
@@ -317,7 +325,6 @@
 </div>
 
 <script>
-  // 状態保持用オブジェクト
   let state = {
     mode: 'live',
     accessToken: null,
@@ -332,7 +339,6 @@
     isCleaning: false
   };
 
-  // デモモード用設定
   const demoPath = [
     { x: 3.0, y: 3.0, angle: 0 }, { x: 12.0, y: 3.0, angle: 90 },
     { x: 12.0, y: 6.0, angle: 180 }, { x: 3.0, y: 6.0, angle: 90 },
@@ -340,7 +346,6 @@
   ];
   let demoPathIndex = 0;
   let cleanedPathHistory = [];
-
   let canvas, ctx, pollingTimer = null;
 
   window.onload = () => {
@@ -348,6 +353,16 @@
     ctx = canvas.getContext('2d');
     drawSlamMap();
   };
+
+  function getTargetUrl(rawUrl) {
+    const mode = document.getElementById('proxy-select').value;
+    if (mode === 'corsproxy') {
+      return `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
+    } else if (mode === 'thingproxy') {
+      return `https://thingproxy.freeboard.io/fetch/${rawUrl}`;
+    }
+    return rawUrl;
+  }
 
   function toggleMode() {
     state.mode = document.getElementById('mode-select').value;
@@ -380,8 +395,11 @@
 
     log("[API] OAuth 2.0 アクセストークンをリクエスト中...");
 
+    const rawUrl = `${baseUrl}/gas/api/v1alpha1/oauth/token`;
+    const requestUrl = getTargetUrl(rawUrl);
+
     try {
-      const response = await fetch(`${baseUrl}/gas/api/v1alpha1/oauth/token`, {
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -397,25 +415,30 @@
         throw new Error(data.error_description || data.message || "認証エラー");
       }
 
+      // 改行コード（CRLF）や前後の空白を除去
       state.accessToken = data.access_token.replace(/\r?\n/g, "").trim();
       log("[API] 認証成功！ アクセストークンを取得しました。");
 
-      // トークン取得後にロボット一覧を検索
+      // 機器一覧の検索へ移行
       await fetchRobotList();
 
     } catch (err) {
       log(`[ERROR] 認証失敗: ${err.message}`);
+      console.error("認証エラー詳細:", err);
       alert(`認証に失敗しました: ${err.message}`);
     }
   }
 
-  // --- 2. 機器一覧（Robots List）の取得 ---
+  // --- 2. 機器一覧の取得 (page=1&page_size=10 パラメータ付与) ---
   async function fetchRobotList() {
     const baseUrl = document.getElementById('api-base-url').value.trim();
     log("[API] 登録ロボット一覧を検索中 (`/v1alpha1/robots?page=1&page_size=10`)...");
 
+    const rawUrl = `${baseUrl}/v1alpha1/robots?page=1&page_size=10`;
+    const requestUrl = getTargetUrl(rawUrl);
+
     try {
-      const response = await fetch(`${baseUrl}/v1alpha1/robots?page=1&page_size=10`, {
+      const response = await fetch(requestUrl, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${state.accessToken}`,
@@ -423,12 +446,17 @@
         }
       });
 
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+
       const data = await response.json();
       const robotSelect = document.getElementById('robot-select');
       robotSelect.innerHTML = '';
 
       if (data.robots && data.robots.length > 0) {
-        data.robots.forEach((robot, idx) => {
+        data.robots.forEach((robot) => {
           const opt = document.createElement('option');
           opt.value = robot.id || robot.serial_number;
           opt.innerText = `${robot.name || 'Phantas'} (${opt.value})`;
@@ -436,18 +464,19 @@
         });
         
         onRobotSelected();
-        log(`[API] ${data.robots.length} 台のロボットを発見しました。`);
+        log(`[API] 成功: ${data.robots.length} 台のロボットを発見しました。`);
         startPolling();
       } else {
         const opt = document.createElement('option');
         opt.value = "";
         opt.innerText = "ロボットが見つかりません (0件)";
         robotSelect.appendChild(opt);
-        log("[WARN] API疎通成功。ただしアカウントにバインドされたロボットが0件です。");
+        log("[SUCCESS] API接続成功！ (登録ロボット数: 0件)");
       }
 
     } catch (err) {
       log(`[ERROR] ロボット一覧取得失敗: ${err.message}`);
+      console.error("ロボット一覧取得エラー詳細:", err);
     }
   }
 
@@ -457,12 +486,12 @@
     document.getElementById('display-robot-id').innerText = state.selectedRobotId || '未選択';
   }
 
-  // --- 3. リアルタイムステータスの定期取得 (ポーリング) ---
+  // --- 3. ポーリング処理 ---
   function startPolling() {
     if (pollingTimer) clearInterval(pollingTimer);
     pollingTimer = setInterval(() => {
       fetchStatus();
-    }, 2000); // 2秒周期
+    }, 2500);
   }
 
   async function fetchStatus() {
@@ -470,9 +499,11 @@
 
     if (state.mode === 'live') {
       const baseUrl = document.getElementById('api-base-url').value.trim();
+      const rawUrl = `${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`;
+      const requestUrl = getTargetUrl(rawUrl);
 
       try {
-        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`, {
+        const response = await fetch(requestUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${state.accessToken}`,
@@ -490,10 +521,9 @@
           updateUI(data);
         }
       } catch (err) {
-        log(`[ERROR] テレメトリ取得エラー: ${err.message}`);
+        console.error("ステータス取得エラー:", err);
       }
     } else {
-      // デモシミュレーション処理
       if (state.isCleaning) {
         const target = demoPath[demoPathIndex];
         const dx = target.x - state.pose.x;
@@ -524,20 +554,22 @@
     drawSlamMap();
   }
 
-  // --- 4. 遠隔制御コマンドの送信 (START, PAUSE, DOCK, STOP) ---
+  // --- 4. 指示コマンド送信 ---
   async function sendCommand(action) {
     if (!state.selectedRobotId) {
       alert("対象のロボットが選択されていません。");
       return;
     }
 
-    log(`[SEND] 指示送信: ${action} -> ${state.selectedRobotId}`);
+    log(`[SEND] コマンド送信: ${action} -> ${state.selectedRobotId}`);
 
     if (state.mode === 'live') {
       const baseUrl = document.getElementById('api-base-url').value.trim();
+      const rawUrl = `${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`;
+      const requestUrl = getTargetUrl(rawUrl);
 
       try {
-        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`, {
+        const response = await fetch(requestUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${state.accessToken}`,
@@ -549,31 +581,20 @@
         const resData = await response.json();
         log(`[RECV] 応答: ${JSON.stringify(resData)}`);
       } catch (err) {
-        log(`[ERROR] 指示送信失敗: ${err.message}`);
+        log(`[ERROR] コマンド送信失敗: ${err.message}`);
       }
     } else {
-      // デモ切り替え
       switch (action) {
-        case 'START':
-          state.isCleaning = true;
-          state.action = '清掃走行中';
-          break;
+        case 'START': state.isCleaning = true; state.action = '清掃走行中'; break;
         case 'PAUSE':
-        case 'STOP':
-          state.isCleaning = false;
-          state.action = '停止中';
-          break;
-        case 'DOCK':
-          state.isCleaning = false;
-          state.action = 'ドック帰還中';
-          state.pose = { x: 3.0, y: 3.0, angle: 0 };
-          break;
+        case 'STOP': state.isCleaning = false; state.action = '停止中'; break;
+        case 'DOCK': state.isCleaning = false; state.action = 'ドック帰還中'; state.pose = { x: 3.0, y: 3.0, angle: 0 }; break;
       }
       log(`[SIM] 状態更新: ${state.action}`);
     }
   }
 
-  // --- 5. UIおよびキャンバスの描画処理 ---
+  // --- 5. UI & キャンバス描画 ---
   function updateUI(data) {
     document.getElementById('map-name-display').innerText = state.mapName || '1F_メインエリア';
     document.getElementById('val-pose').innerText = 
@@ -623,7 +644,6 @@
     ctx.fillRect(180, 120, 120, 30);
     ctx.fillRect(450, 120, 150, 30);
 
-    // 清掃軌跡
     if (cleanedPathHistory.length > 1) {
       ctx.fillStyle = 'rgba(37, 99, 235, 0.35)';
       for (let p of cleanedPathHistory) {
@@ -635,13 +655,11 @@
       }
     }
 
-    // 充電ドック
     const dockX = 50 + 3.0 * scale;
     const dockY = 50 + 3.0 * scale;
     ctx.fillStyle = '#10b981';
     ctx.fillRect(dockX - 12, dockY - 12, 24, 24);
 
-    // ロボット描画
     const rx = 50 + state.pose.x * scale;
     const ry = 50 + state.pose.y * scale;
 
