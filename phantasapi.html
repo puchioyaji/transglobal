@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gausium Phantas コントロールパネル (API連携完全版)</title>
+  <title>Gausium Phantas コントロールパネル (直接接続版)</title>
   
   <style>
     :root {
@@ -12,7 +12,6 @@
       --text-main: #2c3e50;
       --text-sub: #7f8c8d;
       --primary: #2563eb;
-      --primary-hover: #1d4ed8;
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
@@ -90,7 +89,6 @@
       letter-spacing: 0.05em;
     }
 
-    /* SLAMマップキャンバス */
     .map-wrapper {
       position: relative;
       width: 100%;
@@ -120,7 +118,6 @@
     .legend-item { display: flex; align-items: center; gap: 6px; }
     .legend-color { width: 12px; height: 12px; border-radius: 3px; }
 
-    /* API設定フォーム */
     .form-group { margin-bottom: 12px; }
     .form-group label {
       display: block;
@@ -136,7 +133,6 @@
       font-size: 0.9rem;
     }
 
-    /* メトリクス表示 */
     .metrics-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -151,7 +147,6 @@
     .metric-label { font-size: 0.75rem; color: var(--text-sub); }
     .metric-value { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
 
-    /* プログレスバー */
     .progress-bar-bg {
       background: #e2e8f0;
       height: 6px;
@@ -166,7 +161,6 @@
       transition: width 0.3s ease;
     }
 
-    /* 操作ボタン */
     .control-btns {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -189,7 +183,6 @@
     .btn-danger { background: var(--danger); color: white; }
     .btn-secondary { background: #64748b; color: white; }
 
-    /* ログ */
     .log-container {
       background: #0f172a;
       color: #38bdf8;
@@ -215,7 +208,7 @@
     <div id="status-badge" class="status-badge status-offline">● 未接続</div>
   </header>
 
-  <!-- PHANTAS 屋内SLAMマップ表示領域 -->
+  <!-- マップ表示 -->
   <div class="card">
     <div class="card-header">
       <div class="card-title">PHANTAS リアルタイムマップ (SLAM / 2D Grid)</div>
@@ -234,23 +227,23 @@
   </div>
 
   <div class="grid-2">
-    <!-- API設定エリア -->
+    <!-- API設定エリア（直接接続のみ） -->
     <div class="card">
       <div class="card-title">Gausium Cloud API 接続設定</div>
       <div class="form-group">
         <label>動作モード</label>
         <select id="mode-select" onchange="toggleMode()">
-          <option value="live">本番（Gausium Cloud API連携）</option>
+          <option value="live">本番（Gausium Cloud API直接接続）</option>
           <option value="demo">デモ（シミュレーション走行）</option>
         </select>
       </div>
       <div id="api-credentials-group">
         <div class="form-group">
           <label>API エンドポイント</label>
-          <input type="text" id="api-base-url" value="https://openapi.gs-robot.com">
+          <input type="text" id="api-base-url" value="https://openapi.gs-robot.com" readonly style="background:#f1f5f9;">
         </div>
         <div class="form-group">
-          <label>Client ID (AppKey)</label>
+          <label>Client ID</label>
           <input type="text" id="client-id" placeholder="ClientIDを入力">
         </div>
         <div class="form-group">
@@ -260,14 +253,6 @@
         <div class="form-group">
           <label>Open Access Key (Secret)</label>
           <input type="password" id="open-access-key" placeholder="AccessKeySecretを入力">
-        </div>
-        <div class="form-group">
-          <label>通信モード (CORS回避プロキシ)</label>
-          <select id="proxy-select">
-            <option value="corsproxy">Corsproxy 経由 (推奨)</option>
-            <option value="thingproxy">Thingproxy 経由</option>
-            <option value="direct">直接接続 (Allow-CORS拡張機能等を使用時)</option>
-          </select>
         </div>
         <button class="btn-primary" style="width: 100%; margin-top: 8px;" onclick="authenticateAndInit()">認証 & ロボット検索</button>
       </div>
@@ -317,7 +302,7 @@
     </div>
   </div>
 
-  <!-- 通信ログ -->
+  <!-- ログ -->
   <div class="card">
     <div class="card-title">API リクエスト / イベントログ</div>
     <div class="log-container" id="log-output">システム初期化完了。Credentialsを入力して認証を実行してください。</div>
@@ -354,16 +339,6 @@
     drawSlamMap();
   };
 
-  function getTargetUrl(rawUrl) {
-    const mode = document.getElementById('proxy-select').value;
-    if (mode === 'corsproxy') {
-      return `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
-    } else if (mode === 'thingproxy') {
-      return `https://thingproxy.freeboard.io/fetch/${rawUrl}`;
-    }
-    return rawUrl;
-  }
-
   function toggleMode() {
     state.mode = document.getElementById('mode-select').value;
     const credGroup = document.getElementById('api-credentials-group');
@@ -381,9 +356,9 @@
     }
   }
 
-  // --- 1. OAuth 2.0 アクセストークンの取得 ---
+  // --- 1. OAuth 2.0 アクセストークンを取得（直接通信） ---
   async function authenticateAndInit() {
-    const baseUrl = document.getElementById('api-base-url').value.trim();
+    const baseUrl = "https://openapi.gs-robot.com";
     const clientId = document.getElementById('client-id').value.trim();
     const clientSecret = document.getElementById('client-secret').value.trim();
     const openAccessKey = document.getElementById('open-access-key').value.trim();
@@ -393,13 +368,10 @@
       return;
     }
 
-    log("[API] OAuth 2.0 アクセストークンをリクエスト中...");
-
-    const rawUrl = `${baseUrl}/gas/api/v1alpha1/oauth/token`;
-    const requestUrl = getTargetUrl(rawUrl);
+    log("[API] Gausium Cloud API へ直接 OAuth リクエスト送信中...");
 
     try {
-      const response = await fetch(requestUrl, {
+      const response = await fetch(`${baseUrl}/gas/api/v1alpha1/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -415,11 +387,9 @@
         throw new Error(data.error_description || data.message || "認証エラー");
       }
 
-      // 改行コード（CRLF）や前後の空白を除去
       state.accessToken = data.access_token.replace(/\r?\n/g, "").trim();
       log("[API] 認証成功！ アクセストークンを取得しました。");
 
-      // 機器一覧の検索へ移行
       await fetchRobotList();
 
     } catch (err) {
@@ -429,16 +399,13 @@
     }
   }
 
-  // --- 2. 機器一覧の取得 (page=1&page_size=10 パラメータ付与) ---
+  // --- 2. 機器一覧の取得（直接通信） ---
   async function fetchRobotList() {
-    const baseUrl = document.getElementById('api-base-url').value.trim();
-    log("[API] 登録ロボット一覧を検索中 (`/v1alpha1/robots?page=1&page_size=10`)...");
-
-    const rawUrl = `${baseUrl}/v1alpha1/robots?page=1&page_size=10`;
-    const requestUrl = getTargetUrl(rawUrl);
+    const baseUrl = "https://openapi.gs-robot.com";
+    log("[API] 登録ロボット一覧を直接取得中 (`/v1alpha1/robots?page=1&page_size=10`)...");
 
     try {
-      const response = await fetch(requestUrl, {
+      const response = await fetch(`${baseUrl}/v1alpha1/robots?page=1&page_size=10`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${state.accessToken}`,
@@ -471,12 +438,12 @@
         opt.value = "";
         opt.innerText = "ロボットが見つかりません (0件)";
         robotSelect.appendChild(opt);
-        log("[SUCCESS] API接続成功！ (登録ロボット数: 0件)");
+        log("[SUCCESS] 通信成功！ (権限に紐づくロボット数: 0件)");
       }
 
     } catch (err) {
       log(`[ERROR] ロボット一覧取得失敗: ${err.message}`);
-      console.error("ロボット一覧取得エラー詳細:", err);
+      console.error("エラー詳細:", err);
     }
   }
 
@@ -486,7 +453,7 @@
     document.getElementById('display-robot-id').innerText = state.selectedRobotId || '未選択';
   }
 
-  // --- 3. ポーリング処理 ---
+  // --- 3. ポーリング（直接通信） ---
   function startPolling() {
     if (pollingTimer) clearInterval(pollingTimer);
     pollingTimer = setInterval(() => {
@@ -498,12 +465,10 @@
     if (!state.selectedRobotId && state.mode === 'live') return;
 
     if (state.mode === 'live') {
-      const baseUrl = document.getElementById('api-base-url').value.trim();
-      const rawUrl = `${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`;
-      const requestUrl = getTargetUrl(rawUrl);
+      const baseUrl = "https://openapi.gs-robot.com";
 
       try {
-        const response = await fetch(requestUrl, {
+        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${state.accessToken}`,
@@ -554,7 +519,7 @@
     drawSlamMap();
   }
 
-  // --- 4. 指示コマンド送信 ---
+  // --- 4. 指示コマンド（直接通信） ---
   async function sendCommand(action) {
     if (!state.selectedRobotId) {
       alert("対象のロボットが選択されていません。");
@@ -564,12 +529,10 @@
     log(`[SEND] コマンド送信: ${action} -> ${state.selectedRobotId}`);
 
     if (state.mode === 'live') {
-      const baseUrl = document.getElementById('api-base-url').value.trim();
-      const rawUrl = `${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`;
-      const requestUrl = getTargetUrl(rawUrl);
+      const baseUrl = "https://openapi.gs-robot.com";
 
       try {
-        const response = await fetch(requestUrl, {
+        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${state.accessToken}`,
@@ -594,7 +557,7 @@
     }
   }
 
-  // --- 5. UI & キャンバス描画 ---
+  // --- 5. UI & 描画 ---
   function updateUI(data) {
     document.getElementById('map-name-display').innerText = state.mapName || '1F_メインエリア';
     document.getElementById('val-pose').innerText = 
