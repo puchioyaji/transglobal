@@ -227,7 +227,7 @@
   </div>
 
   <div class="grid-2">
-    <!-- API設定エリア（直接接続のみ） -->
+    <!-- API設定エリア -->
     <div class="card">
       <div class="card-title">Gausium Cloud API 接続設定</div>
       <div class="form-group">
@@ -243,15 +243,15 @@
           <input type="text" id="api-base-url" value="https://openapi.gs-robot.com" readonly style="background:#f1f5f9;">
         </div>
         <div class="form-group">
-          <label>Client ID</label>
-          <input type="text" id="client-id" placeholder="ClientIDを入力">
+          <label>Application ID (Client ID)</label>
+          <input type="text" id="client-id" placeholder="Application IDを入力">
         </div>
         <div class="form-group">
-          <label>Client Secret</label>
-          <input type="password" id="client-secret" placeholder="ClientSecretを入力">
+          <label>App Secret (Client Secret)</label>
+          <input type="password" id="client-secret" placeholder="App Secretを入力">
         </div>
         <div class="form-group">
-          <label>Open Access Key (Secret)</label>
+          <label>AccessKeySecret (Open Access Key)</label>
           <input type="password" id="open-access-key" placeholder="AccessKeySecretを入力">
         </div>
         <button class="btn-primary" style="width: 100%; margin-top: 8px;" onclick="authenticateAndInit()">認証 & ロボット検索</button>
@@ -356,19 +356,19 @@
     }
   }
 
-  // --- 1. OAuth 2.0 アクセストークンを取得（直接通信） ---
+  // --- 1. OAuth 2.0 アクセストークンを取得 ---
   async function authenticateAndInit() {
     const baseUrl = "https://openapi.gs-robot.com";
     const clientId = document.getElementById('client-id').value.trim();
     const clientSecret = document.getElementById('client-secret').value.trim();
-    const openAccessKey = document.getElementById('open-access-key').value.trim();
+    const accessKeySecret = document.getElementById('open-access-key').value.trim();
 
-    if (!clientId || !clientSecret || !openAccessKey) {
+    if (!clientId || !clientSecret || !accessKeySecret) {
       alert("すべての認証情報キーを入力してください。");
       return;
     }
 
-    log("[API] Gausium Cloud API へ直接 OAuth リクエスト送信中...");
+    log("[API] Gausium Cloud API へ OAuth リクエスト送信中...");
 
     try {
       const response = await fetch(`${baseUrl}/gas/api/v1alpha1/oauth/token`, {
@@ -378,7 +378,7 @@
           grant_type: "urn:gaussian:params:oauth:grant-type:open-access-token",
           client_id: clientId,
           client_secret: clientSecret,
-          open_access_key: openAccessKey
+          open_access_key: accessKeySecret  // AccessKeySecretを渡す
         })
       });
 
@@ -399,10 +399,10 @@
     }
   }
 
-  // --- 2. 機器一覧の取得（直接通信） ---
+  // --- 2. 機器一覧の取得 ---
   async function fetchRobotList() {
     const baseUrl = "https://openapi.gs-robot.com";
-    log("[API] 登録ロボット一覧を直接取得中 (`/v1alpha1/robots?page=1&page_size=10`)...");
+    log("[API] 登録ロボット一覧を取得中 (`/v1alpha1/robots?page=1&page_size=10`)...");
 
     try {
       const response = await fetch(`${baseUrl}/v1alpha1/robots?page=1&page_size=10`, {
@@ -453,7 +453,7 @@
     document.getElementById('display-robot-id').innerText = state.selectedRobotId || '未選択';
   }
 
-  // --- 3. ポーリング（直接通信） ---
+  // --- 3. ポーリング ---
   function startPolling() {
     if (pollingTimer) clearInterval(pollingTimer);
     pollingTimer = setInterval(() => {
@@ -519,7 +519,7 @@
     drawSlamMap();
   }
 
-  // --- 4. 指示コマンド（直接通信） ---
+  // --- 4. 指示コマンド ---
   async function sendCommand(action) {
     if (!state.selectedRobotId) {
       alert("対象のロボットが選択されていません。");
