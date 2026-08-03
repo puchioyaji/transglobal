@@ -134,7 +134,7 @@
 
         .controls { 
             display: flex; 
-            gap: 8px; 
+            gap: 6px; 
             position: fixed;
             bottom: 0;
             left: 0;
@@ -147,17 +147,19 @@
         }
         button { 
             flex: 1; 
-            padding: 14px 10px; 
+            padding: 14px 6px; 
             border: none; 
             border-radius: 8px; 
-            font-size: 0.95rem; 
+            font-size: 0.85rem; 
             font-weight: bold; 
             cursor: pointer; 
             -webkit-tap-highlight-color: transparent;
         }
         #btn-start { background-color: #2196f3; color: white; flex: 2; }
         #btn-start.recording { background-color: #ff5252; }
-        #btn-lecture { background-color: #607d8b; color: white; flex: 1.5; }
+        #btn-tts { background-color: #4caf50; color: white; flex: 1.2; }
+        #btn-tts.muted { background-color: #e0e0e0; color: #757575; }
+        #btn-lecture { background-color: #607d8b; color: white; flex: 1.2; }
         #btn-lecture.active { background-color: #ff9800; color: #fff; }
         #btn-download { background-color: #00bcd4; color: white; flex: 0.8; }
         #btn-clear { background-color: #bdbdbd; color: #333; flex: 0.8; }
@@ -276,6 +278,7 @@
 
 <div class="controls">
     <button id="btn-start">自動通訳スタート</button>
+    <button id="btn-tts">🔊 発話ON</button>
     <button id="btn-lecture">講師モード</button>
     <button id="btn-download">履歴DL</button>
     <button id="btn-clear">全消去</button>
@@ -295,10 +298,16 @@
     let recognition = null;
     let isRecording = false;
     let isLectureMode = false;
+    let isTtsEnabled = true; // 発話機能（スピーカー）のON/OFFフラグ
     let historyData = [];
+
+    // 重複防止用変数
+    let lastRecognizedText = "";
+    let duplicateResetTimer = null;
 
     // DOM要素
     const btnStart = document.getElementById('btn-start');
+    const btnTts = document.getElementById('btn-tts');
     const btnLecture = document.getElementById('btn-lecture');
     const btnDownload = document.getElementById('btn-download');
     const btnClear = document.getElementById('btn-clear');
@@ -318,7 +327,7 @@
     const lblLang3 = document.getElementById('lbl-output-lang3');
 
     // =========================================================================
-    // 完全順次処理（シーケンシャル・キュー）パイプライン
+    // シーケンシャル・キュー パイプライン
     // =========================================================================
     const processingQueue = [];
     let isProcessing = false;
@@ -326,35 +335,46 @@
     const ttsQueue = [];
     let isSpeaking = false;
 
-    // --- フィラー（言い淀み）の自動除去関数 ---
+    // フィラー（言い淀み）の自動除去
     function removeFillerWords(text) {
         if (!text) return "";
-        // 「えー」「あー」「うーん」「あのー」「えっと」「んー」などを除去
         const fillerRegex = /^(えー+|あー+|うー+ん*|あのー*|えー+と|えっと|んー+)[、,。.\s]*/g;
         let cleaned = text.replace(fillerRegex, "");
-        
-        // 文中の「、えー、」「、うーん、」なども除去
         cleaned = cleaned.replace(/[、,]\s*(えー+|あー+|うー+ん*|あのー*|えっと)\s*/g, "、");
-        
         return cleaned.trim();
     }
 
-    // 音声認識側から即座にテキストを受け取りキューに積む
+    // 重複検出 & キュー投函処理
     function enqueueRecognizedText(text) {
-        processingQueue.push(text);
+        let cleaned = removeFillerWords(text);
+        cleaned = applyWordCorrection(cleaned);
+
+        if (!cleaned || cleaned.length < 1) return;
+
+        if (cleaned === lastRecognizedText) {
+            console.log("重複発言をスキップ:", cleaned);
+            return;
+        }
+
+        lastRecognizedText = cleaned;
+        if (duplicateResetTimer) clearTimeout(duplicateResetTimer);
+        duplicateResetTimer = setTimeout(() => {
+            lastRecognizedText = "";
+        }, 2500);
+
+        processingQueue.push(cleaned);
         triggerProcessingEngine();
     }
 
-    // パイプラインエンジン：言葉抜けを防ぐため1つずつ「完全順次」に翻訳処理
+    // パイプラインエンジン（1つずつ順次実行）
     async function triggerProcessingEngine() {
         if (isProcessing) return;
         isProcessing = true;
 
         while (processingQueue.length > 0) {
-            // 先頭から発言を一つずつ取得（FIFO）
-            const rawText = processingQueue.shift();
+            const text = processingQueue.shift();
             try {
-                await processTextPipeline(rawText);
+                await processTextPipeline(text);
             } catch (err) {
                 console.error("Pipeline Error:", err);
             }
@@ -362,17 +382,8 @@
         isProcessing = false;
     }
 
-    // 1つの文章の成形・翻訳・画面反映タスク
-    async function processTextPipeline(rawText) {
-        // 1. フィラー除去
-        let text = removeFillerWords(rawText);
-        
-        // 2. 単語修正辞書の適用
-        text = applyWordCorrection(text);
-        
-        // フィラー除去によって空になった場合（「えー」単体等）のみ無駄な処理を防止するためスキップ
-        if (!text || text.length < 1) return;
-
+    // 翻訳・UI反映タスク
+    async function processTextPipeline(text) {
         const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
         if (isLectureMode) {
@@ -380,7 +391,6 @@
             const iso2 = getSelectedIso(selectLang2);
             const iso3 = getSelectedIso(selectLang3);
 
-            // 並列で2言語を翻訳（この文章自体の通信完了を待つ）
             const [trans2, trans3] = await Promise.all([
                 executeSafeTranslation(text, iso1, iso2),
                 executeSafeTranslation(text, iso1, iso3)
@@ -402,20 +412,20 @@
                 msgClass = 'msg-lang1'; ttsLangCode = selectLang2.value; fromIso = getSelectedIso(selectLang1); toIso = getSelectedIso(selectLang2);
             }
 
-            // 順番通りにAPIから翻訳を取得（キャンセルせず最後まで待つ）
             let translatedText = localTranslationDictionary[cleanKey] || await executeSafeTranslation(text, fromIso, toIso);
 
-            // 画面表示
             renderChatBubbleUI(text, translatedText, msgClass);
             historyData.push({ time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass });
 
-            // 発話エンジン（TTS）のキューへ投入
-            let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7;
-            enqueueTTS({ text: translatedText, lang: ttsLangCode, pitch: estimatedPitch });
+            // 発話フラグがONの時のみ発話キューに追加
+            if (isTtsEnabled) {
+                let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7;
+                enqueueTTS({ text: translatedText, lang: ttsLangCode, pitch: estimatedPitch });
+            }
         }
     }
 
-    // --- UIレンダー ---
+    // UI描画
     function renderChatBubbleUI(original, translated, className) {
         requestAnimationFrame(() => {
             const box = document.createElement('div');
@@ -441,15 +451,15 @@
         });
     }
 
-    // --- シーケンシャル音声発話（TTS） ---
+    // シーケンシャル音声発話（TTS）
     function enqueueTTS(item) {
-        if (!window.speechSynthesis || isLectureMode) return;
+        if (!window.speechSynthesis || isLectureMode || !isTtsEnabled) return;
         ttsQueue.push(item);
         triggerTTSEngine();
     }
 
     function triggerTTSEngine() {
-        if (isSpeaking || ttsQueue.length === 0) return;
+        if (isSpeaking || ttsQueue.length === 0 || !isTtsEnabled) return;
         isSpeaking = true;
 
         const task = ttsQueue.shift();
@@ -484,7 +494,7 @@
         
         const rec = new SpeechRecognition();
         rec.continuous = true;       
-        rec.interimResults = false;  // 確定した発話のみを取得して精度向上
+        rec.interimResults = false; 
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
@@ -492,7 +502,6 @@
             let text = event.results[resultIndex][0].transcript.trim();
             if (!text) return;
 
-            // 発話を即座にキューへ投入（マイク聴取処理は絶対に止めない）
             enqueueRecognizedText(text);
         };
 
@@ -512,14 +521,12 @@
     }
 
     // =========================================================================
-    // 通信処理（キャンセルせず確実に完了させる仕様）
+    // 通信処理
     // =========================================================================
     async function executeSafeTranslation(text, from, to) {
         if (from === to) return text;
 
         const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-        
-        // ネットワーク切断などで無限に停止するのを防ぐ安全装置（3秒タイムアウト）
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
 
@@ -533,7 +540,6 @@
             return text; 
         } catch (e) {
             clearTimeout(timeoutId);
-            // 通信エラーやタイムアウト時も、原文をそのまま返してキューを次へ進める（言葉抜けを防止）
             return text; 
         }
     }
@@ -591,6 +597,22 @@
         }
     });
 
+    // ★ スピーカー（発話機能）ON/OFF切り替えイベント
+    btnTts.addEventListener('click', () => {
+        isTtsEnabled = !isTtsEnabled;
+        if (isTtsEnabled) {
+            btnTts.textContent = "🔊 発話ON";
+            btnTts.classList.remove('muted');
+        } else {
+            btnTts.textContent = "🔇 発話OFF";
+            btnTts.classList.add('muted');
+            // OFFにした瞬間に、再生予定だった発話キューと現在の再生を打ち切る
+            ttsQueue.length = 0;
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            isSpeaking = false;
+        }
+    });
+
     btnLecture.addEventListener('click', () => {
         isLectureMode = !isLectureMode;
         if (isLectureMode) {
@@ -625,6 +647,7 @@
             historyData = []; 
             processingQueue.length = 0;
             ttsQueue.length = 0;
+            lastRecognizedText = "";
             outLang1.textContent="待機中..."; 
             outLang2.textContent="---"; 
             outLang3.textContent="---"; 
