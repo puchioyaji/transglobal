@@ -318,29 +318,40 @@
     const lblLang3 = document.getElementById('lbl-output-lang3');
 
     // =========================================================================
-    // 【エンジン構造】キュー & シーケンサー設計
+    // 完全順次処理（シーケンシャル・キュー）パイプライン
     // =========================================================================
-
-    // 1. 翻訳・加工用処理キュー（認めた文章を即投函）
     const processingQueue = [];
     let isProcessing = false;
 
-    // 2. 音声発話（TTS）専用シーケンシャルキュー
     const ttsQueue = [];
     let isSpeaking = false;
 
-    // --- キュー投入関数 (エンジン① -> エンジン②への手渡し) ---
+    // --- フィラー（言い淀み）の自動除去関数 ---
+    function removeFillerWords(text) {
+        if (!text) return "";
+        // 「えー」「あー」「うーん」「あのー」「えっと」「んー」などを除去
+        const fillerRegex = /^(えー+|あー+|うー+ん*|あのー*|えー+と|えっと|んー+)[、,。.\s]*/g;
+        let cleaned = text.replace(fillerRegex, "");
+        
+        // 文中の「、えー、」「、うーん、」なども除去
+        cleaned = cleaned.replace(/[、,]\s*(えー+|あー+|うー+ん*|あのー*|えっと)\s*/g, "、");
+        
+        return cleaned.trim();
+    }
+
+    // 音声認識側から即座にテキストを受け取りキューに積む
     function enqueueRecognizedText(text) {
         processingQueue.push(text);
         triggerProcessingEngine();
     }
 
-    // --- エンジン②: 成形・翻訳パイプライン ---
+    // パイプラインエンジン：言葉抜けを防ぐため1つずつ「完全順次」に翻訳処理
     async function triggerProcessingEngine() {
         if (isProcessing) return;
         isProcessing = true;
 
         while (processingQueue.length > 0) {
+            // 先頭から発言を一つずつ取得（FIFO）
             const rawText = processingQueue.shift();
             try {
                 await processTextPipeline(rawText);
@@ -351,28 +362,34 @@
         isProcessing = false;
     }
 
-    // 成形・辞書適用・翻訳タスクの実体
+    // 1つの文章の成形・翻訳・画面反映タスク
     async function processTextPipeline(rawText) {
-        const text = applyWordCorrection(rawText);
+        // 1. フィラー除去
+        let text = removeFillerWords(rawText);
+        
+        // 2. 単語修正辞書の適用
+        text = applyWordCorrection(text);
+        
+        // フィラー除去によって空になった場合（「えー」単体等）のみ無駄な処理を防止するためスキップ
+        if (!text || text.length < 1) return;
+
         const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
         if (isLectureMode) {
-            // 講師モードの処理
             const iso1 = getSelectedIso(selectLang1);
             const iso2 = getSelectedIso(selectLang2);
             const iso3 = getSelectedIso(selectLang3);
 
+            // 並列で2言語を翻訳（この文章自体の通信完了を待つ）
             const [trans2, trans3] = await Promise.all([
                 executeSafeTranslation(text, iso1, iso2),
                 executeSafeTranslation(text, iso1, iso3)
             ]);
 
-            // エンジン③ (画面描画) を実行
             renderLectureUI(text, trans2, trans3);
             historyData.push({ time: new Date().toLocaleTimeString(), original: `[講師] ${text}`, translated: `② ${trans2} | ③ ${trans3}`, type: 'msg-lang1' });
 
         } else {
-            // 双方向通訳モードの言語自動判別
             const isKatakanaOnly = /^[ァ-ヴー\s]+$/.test(cleanKey);
             const isEnglishInput = /[A-Za-z]/.test(text) ||
                                     (localTranslationDictionary[cleanKey] && !/^[\u3040-\u309f\u4e00-\u9faf]+$/.test(cleanKey)) ||
@@ -385,20 +402,20 @@
                 msgClass = 'msg-lang1'; ttsLangCode = selectLang2.value; fromIso = getSelectedIso(selectLang1); toIso = getSelectedIso(selectLang2);
             }
 
-            // 翻訳処理
+            // 順番通りにAPIから翻訳を取得（キャンセルせず最後まで待つ）
             let translatedText = localTranslationDictionary[cleanKey] || await executeSafeTranslation(text, fromIso, toIso);
 
-            // エンジン③ (画面描画エンジン) へ引き渡し
+            // 画面表示
             renderChatBubbleUI(text, translatedText, msgClass);
             historyData.push({ time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass });
 
-            // エンジン④ (シーケンシャル発話エンジン) のキューへ投入
+            // 発話エンジン（TTS）のキューへ投入
             let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7;
             enqueueTTS({ text: translatedText, lang: ttsLangCode, pitch: estimatedPitch });
         }
     }
 
-    // --- エンジン③: 画面描画（UI）専用レンダー関数 ---
+    // --- UIレンダー ---
     function renderChatBubbleUI(original, translated, className) {
         requestAnimationFrame(() => {
             const box = document.createElement('div');
@@ -408,7 +425,7 @@
             box.appendChild(origEl); box.appendChild(transEl);
             chatHistory.appendChild(box); 
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            statusText.textContent = "自由にお話しください（並列処理中）...";
+            statusText.textContent = "自由にお話しください（順次通訳中）...";
         });
     }
 
@@ -424,7 +441,7 @@
         });
     }
 
-    // --- エンジン④: シーケンシャル音声発話（TTS）専用エンジン ---
+    // --- シーケンシャル音声発話（TTS） ---
     function enqueueTTS(item) {
         if (!window.speechSynthesis || isLectureMode) return;
         ttsQueue.push(item);
@@ -445,7 +462,6 @@
         const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(task.lang.substring(0,2).toLowerCase()));
         if (matchingVoice) utterance.voice = matchingVoice;
 
-        // 読み上げ完了後に次のキューアイテムを再生（シーケンシャル保障）
         utterance.onend = () => {
             isSpeaking = false;
             triggerTTSEngine();
@@ -461,14 +477,14 @@
     }
 
     // =========================================================================
-    // 【エンジン①】音声認識・ヒアリング専用エンジン
+    // 【音声認識エンジン】
     // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
         
         const rec = new SpeechRecognition();
-        rec.continuous = true;       // 音声をバックグラウンドで絶え間なくリッスン
-        rec.interimResults = false;  // 確定のみに絞って負荷を低減
+        rec.continuous = true;       
+        rec.interimResults = false;  // 確定した発話のみを取得して精度向上
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
@@ -476,12 +492,11 @@
             let text = event.results[resultIndex][0].transcript.trim();
             if (!text) return;
 
-            // 音声が取れたら即座にパイプラインキューへ投入してマイクスレッドを維持
+            // 発話を即座にキューへ投入（マイク聴取処理は絶対に止めない）
             enqueueRecognizedText(text);
         };
 
         rec.onend = () => {
-            // 切断されたら最速で再スタートさせて音声漏れを防ぐ
             if (isRecording) {
                 setTimeout(() => {
                     try { recognition.start(); } catch(e){}
@@ -497,14 +512,16 @@
     }
 
     // =========================================================================
-    // ユーティリティ・API関数
+    // 通信処理（キャンセルせず確実に完了させる仕様）
     // =========================================================================
     async function executeSafeTranslation(text, from, to) {
         if (from === to) return text;
+
         const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
         
+        // ネットワーク切断などで無限に停止するのを防ぐ安全装置（3秒タイムアウト）
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5秒タイムアウト
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
 
         try {
             const res = await fetch(url, { signal: controller.signal });
@@ -516,6 +533,7 @@
             return text; 
         } catch (e) {
             clearTimeout(timeoutId);
+            // 通信エラーやタイムアウト時も、原文をそのまま返してキューを次へ進める（言葉抜けを防止）
             return text; 
         }
     }
@@ -548,7 +566,7 @@
     }
 
     // =========================================================================
-    // UI イベントハンドラー
+    // UI イベント
     // =========================================================================
     btnStart.addEventListener('click', () => {
         if (!SpeechRecognition) { alert("音声認識未対応ブラウザです。"); return; }
@@ -561,7 +579,7 @@
             
             btnStart.textContent = "自動通訳を停止"; 
             btnStart.classList.add('recording');
-            statusText.textContent = "自由にお話しください（並列処理中）...";
+            statusText.textContent = "自由にお話しください（順次通訳中）...";
         } else {
             isRecording = false; 
             if (recognition) {
@@ -582,7 +600,7 @@
             statusText.style.backgroundColor = '#ff9800';
             statusText.style.color = '#fff';
             if(window.speechSynthesis) window.speechSynthesis.cancel();
-            ttsQueue.length = 0; // TTSバッファクリア
+            ttsQueue.length = 0;
         } else {
             btnLecture.classList.remove('active');
             chatHistory.style.display = 'block';
