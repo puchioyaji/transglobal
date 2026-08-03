@@ -51,7 +51,7 @@
             overflow: hidden;
             padding: 10px;
             box-sizing: border-box;
-            margin-bottom: 80px; 
+            margin-bottom: 90px; 
         }
         .settings {
             background: white;
@@ -132,37 +132,42 @@
         .lecture-label { font-size: 0.9rem; opacity: 0.5; margin-bottom: 4px; }
         .lecture-text { font-size: 2rem; font-weight: bold; word-break: break-word; line-height: 1.3; }
 
+        /* ボタン表示領域のレイアウト強化 */
         .controls { 
             display: flex; 
-            gap: 6px; 
+            flex-wrap: wrap; /* 画面サイズに合わせて折り返し対応 */
+            gap: 4px; 
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background-color: #f5f5f5;
-            padding: 10px 10px calc(12px + env(safe-area-inset-bottom)) 10px;
+            padding: 8px 8px calc(10px + env(safe-area-inset-bottom)) 8px;
             box-shadow: 0 -4px 10px rgba(0,0,0,0.08);
             z-index: 99999;
             box-sizing: border-box;
         }
         button { 
-            flex: 1; 
-            padding: 14px 6px; 
+            flex: 1 1 auto; 
+            min-width: 60px;
+            padding: 12px 4px; 
             border: none; 
             border-radius: 8px; 
-            font-size: 0.85rem; 
+            font-size: 0.8rem; 
             font-weight: bold; 
             cursor: pointer; 
             -webkit-tap-highlight-color: transparent;
+            text-align: center;
+            white-space: nowrap;
         }
-        #btn-start { background-color: #2196f3; color: white; flex: 2; }
+        #btn-start { background-color: #2196f3; color: white; min-width: 110px; }
         #btn-start.recording { background-color: #ff5252; }
-        #btn-tts { background-color: #4caf50; color: white; flex: 1.2; }
+        #btn-tts { background-color: #4caf50; color: white; }
         #btn-tts.muted { background-color: #e0e0e0; color: #757575; }
-        #btn-lecture { background-color: #607d8b; color: white; flex: 1.2; }
+        #btn-lecture { background-color: #607d8b; color: white; }
         #btn-lecture.active { background-color: #ff9800; color: #fff; }
-        #btn-download { background-color: #00bcd4; color: white; flex: 0.8; }
-        #btn-clear { background-color: #bdbdbd; color: #333; flex: 0.8; }
+        #btn-download { background-color: #00bcd4; color: white; }
+        #btn-clear { background-color: #bdbdbd; color: #333; }
     </style>
 </head>
 <body>
@@ -276,6 +281,7 @@
     </div>
 </div>
 
+<!-- 下部コントロールボタン領域 -->
 <div class="controls">
     <button id="btn-start">自動通訳スタート</button>
     <button id="btn-tts">🔊 発話ON</button>
@@ -298,10 +304,9 @@
     let recognition = null;
     let isRecording = false;
     let isLectureMode = false;
-    let isTtsEnabled = true; // 発話機能（スピーカー）のON/OFFフラグ
+    let isTtsEnabled = true; 
     let historyData = [];
 
-    // 重複防止用変数
     let lastRecognizedText = "";
     let duplicateResetTimer = null;
 
@@ -327,7 +332,7 @@
     const lblLang3 = document.getElementById('lbl-output-lang3');
 
     // =========================================================================
-    // シーケンシャル・キュー パイプライン
+    // パイプライン・処理キュー
     // =========================================================================
     const processingQueue = [];
     let isProcessing = false;
@@ -335,7 +340,6 @@
     const ttsQueue = [];
     let isSpeaking = false;
 
-    // フィラー（言い淀み）の自動除去
     function removeFillerWords(text) {
         if (!text) return "";
         const fillerRegex = /^(えー+|あー+|うー+ん*|あのー*|えー+と|えっと|んー+)[、,。.\s]*/g;
@@ -344,7 +348,6 @@
         return cleaned.trim();
     }
 
-    // 重複検出 & キュー投函処理
     function enqueueRecognizedText(text) {
         let cleaned = removeFillerWords(text);
         cleaned = applyWordCorrection(cleaned);
@@ -366,7 +369,6 @@
         triggerProcessingEngine();
     }
 
-    // パイプラインエンジン（1つずつ順次実行）
     async function triggerProcessingEngine() {
         if (isProcessing) return;
         isProcessing = true;
@@ -382,7 +384,6 @@
         isProcessing = false;
     }
 
-    // 翻訳・UI反映タスク
     async function processTextPipeline(text) {
         const cleanKey = text.toLowerCase().replace(/[.?!、。]/g, "");
 
@@ -417,7 +418,6 @@
             renderChatBubbleUI(text, translatedText, msgClass);
             historyData.push({ time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass });
 
-            // 発話フラグがONの時のみ発話キューに追加
             if (isTtsEnabled) {
                 let estimatedPitch = text.length % 2 === 0 ? 1.3 : 0.7;
                 enqueueTTS({ text: translatedText, lang: ttsLangCode, pitch: estimatedPitch });
@@ -425,7 +425,6 @@
         }
     }
 
-    // UI描画
     function renderChatBubbleUI(original, translated, className) {
         requestAnimationFrame(() => {
             const box = document.createElement('div');
@@ -451,7 +450,6 @@
         });
     }
 
-    // シーケンシャル音声発話（TTS）
     function enqueueTTS(item) {
         if (!window.speechSynthesis || isLectureMode || !isTtsEnabled) return;
         ttsQueue.push(item);
@@ -487,7 +485,7 @@
     }
 
     // =========================================================================
-    // 【音声認識エンジン】
+    // 音声認識エンジン
     // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
@@ -572,7 +570,7 @@
     }
 
     // =========================================================================
-    // UI イベント
+    // UI イベントハンドラー
     // =========================================================================
     btnStart.addEventListener('click', () => {
         if (!SpeechRecognition) { alert("音声認識未対応ブラウザです。"); return; }
@@ -597,7 +595,7 @@
         }
     });
 
-    // ★ スピーカー（発話機能）ON/OFF切り替えイベント
+    // スピーカー（発話ON/OFF）切替ボタン
     btnTts.addEventListener('click', () => {
         isTtsEnabled = !isTtsEnabled;
         if (isTtsEnabled) {
@@ -606,7 +604,6 @@
         } else {
             btnTts.textContent = "🔇 発話OFF";
             btnTts.classList.add('muted');
-            // OFFにした瞬間に、再生予定だった発話キューと現在の再生を打ち切る
             ttsQueue.length = 0;
             if (window.speechSynthesis) window.speechSynthesis.cancel();
             isSpeaking = false;
