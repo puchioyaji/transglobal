@@ -132,10 +132,9 @@
         .lecture-label { font-size: 0.9rem; opacity: 0.5; margin-bottom: 4px; }
         .lecture-text { font-size: 2rem; font-weight: bold; word-break: break-word; line-height: 1.3; }
 
-        /* ボタン表示領域のレイアウト強化 */
         .controls { 
             display: flex; 
-            flex-wrap: wrap; /* 画面サイズに合わせて折り返し対応 */
+            flex-wrap: wrap; 
             gap: 4px; 
             position: fixed;
             bottom: 0;
@@ -281,7 +280,6 @@
     </div>
 </div>
 
-<!-- 下部コントロールボタン領域 -->
 <div class="controls">
     <button id="btn-start">自動通訳スタート</button>
     <button id="btn-tts">🔊 発話ON</button>
@@ -291,6 +289,62 @@
 </div>
 
 <script>
+    // =========================================================================
+    // 【並列処理パイプライン】 Web Worker（バックグラウンド翻訳エンジン）の生成
+    // =========================================================================
+    const workerCode = `
+        self.onmessage = async function(e) {
+            const { id, text, from, to } = e.data;
+            if (from === to) {
+                self.postMessage({ id, translatedText: text });
+                return;
+            }
+            const url = "https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=" + from + "|" + to;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data && data.responseData && data.responseData.translatedText) {
+                    self.postMessage({ id, translatedText: data.responseData.translatedText });
+                } else {
+                    self.postMessage({ id, translatedText: text });
+                }
+            } catch (err) {
+                self.postMessage({ id, translatedText: text });
+            }
+        };
+    `;
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const translationWorker = new Worker(URL.createObjectURL(blob));
+
+    // Worker レスポンスのリスナーマップ
+    const workerCallbacks = new Map();
+    let workerTaskId = 0;
+
+    translationWorker.onmessage = function(e) {
+        const { id, translatedText } = e.data;
+        if (workerCallbacks.has(id)) {
+            const resolve = workerCallbacks.get(id);
+            workerCallbacks.delete(id);
+            resolve(translatedText);
+        }
+    };
+
+    function requestWorkerTranslation(text, from, to) {
+        return new Promise((resolve) => {
+            const id = ++workerTaskId;
+            workerCallbacks.set(id, resolve);
+            translationWorker.postMessage({ id, text, from, to });
+            
+            // 通信遅延時の安全装置（2.5秒で打ち切って元テキストを返す）
+            setTimeout(() => {
+                if (workerCallbacks.has(id)) {
+                    workerCallbacks.delete(id);
+                    resolve(text);
+                }
+            }, 2500);
+        });
+    }
+
     // =========================================================================
     // 定数・グローバル変数
     // =========================================================================
@@ -331,15 +385,14 @@
     const lblLang2 = document.getElementById('lbl-output-lang2');
     const lblLang3 = document.getElementById('lbl-output-lang3');
 
-    // =========================================================================
-    // パイプライン・処理キュー
-    // =========================================================================
+    // キューシステム
     const processingQueue = [];
     let isProcessing = false;
 
     const ttsQueue = [];
     let isSpeaking = false;
 
+    // フィラー（言い淀み）の削除
     function removeFillerWords(text) {
         if (!text) return "";
         const fillerRegex = /^(えー+|あー+|うー+ん*|あのー*|えー+と|えっと|んー+)[、,。.\s]*/g;
@@ -354,16 +407,11 @@
 
         if (!cleaned || cleaned.length < 1) return;
 
-        if (cleaned === lastRecognizedText) {
-            console.log("重複発言をスキップ:", cleaned);
-            return;
-        }
+        if (cleaned === lastRecognizedText) return;
 
         lastRecognizedText = cleaned;
         if (duplicateResetTimer) clearTimeout(duplicateResetTimer);
-        duplicateResetTimer = setTimeout(() => {
-            lastRecognizedText = "";
-        }, 2500);
+        duplicateResetTimer = setTimeout(() => { lastRecognizedText = ""; }, 2500);
 
         processingQueue.push(cleaned);
         triggerProcessingEngine();
@@ -392,9 +440,10 @@
             const iso2 = getSelectedIso(selectLang2);
             const iso3 = getSelectedIso(selectLang3);
 
+            // Web Worker に翻訳通信をバックグラウンド並列委任
             const [trans2, trans3] = await Promise.all([
-                executeSafeTranslation(text, iso1, iso2),
-                executeSafeTranslation(text, iso1, iso3)
+                requestWorkerTranslation(text, iso1, iso2),
+                requestWorkerTranslation(text, iso1, iso3)
             ]);
 
             renderLectureUI(text, trans2, trans3);
@@ -413,7 +462,7 @@
                 msgClass = 'msg-lang1'; ttsLangCode = selectLang2.value; fromIso = getSelectedIso(selectLang1); toIso = getSelectedIso(selectLang2);
             }
 
-            let translatedText = localTranslationDictionary[cleanKey] || await executeSafeTranslation(text, fromIso, toIso);
+            let translatedText = localTranslationDictionary[cleanKey] || await requestWorkerTranslation(text, fromIso, toIso);
 
             renderChatBubbleUI(text, translatedText, msgClass);
             historyData.push({ time: new Date().toLocaleTimeString(), original: text, translated: translatedText, type: msgClass });
@@ -425,6 +474,7 @@
         }
     }
 
+    // UIレンダリング（メインスレッド最適化）
     function renderChatBubbleUI(original, translated, className) {
         requestAnimationFrame(() => {
             const box = document.createElement('div');
@@ -434,7 +484,7 @@
             box.appendChild(origEl); box.appendChild(transEl);
             chatHistory.appendChild(box); 
             chatHistory.scrollTop = chatHistory.scrollHeight;
-            statusText.textContent = "自由にお話しください（順次通訳中）...";
+            statusText.textContent = "自由にお話しください（高速並列中）...";
         });
     }
 
@@ -450,6 +500,7 @@
         });
     }
 
+    // 音声発話（TTS）パイプライン
     function enqueueTTS(item) {
         if (!window.speechSynthesis || isLectureMode || !isTtsEnabled) return;
         ttsQueue.push(item);
@@ -476,7 +527,6 @@
         };
 
         utterance.onerror = (e) => {
-            console.warn("TTS Event Error:", e);
             isSpeaking = false;
             triggerTTSEngine();
         };
@@ -484,9 +534,7 @@
         window.speechSynthesis.speak(utterance);
     }
 
-    // =========================================================================
     // 音声認識エンジン
-    // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
         
@@ -518,30 +566,6 @@
         return rec;
     }
 
-    // =========================================================================
-    // 通信処理
-    // =========================================================================
-    async function executeSafeTranslation(text, from, to) {
-        if (from === to) return text;
-
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        try {
-            const res = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            const data = await res.json();
-            if (data && data.responseData && data.responseData.translatedText) {
-                return data.responseData.translatedText;
-            }
-            return text; 
-        } catch (e) {
-            clearTimeout(timeoutId);
-            return text; 
-        }
-    }
-
     function applyWordCorrection(text) {
         const dictConfig = txtDict.value;
         if (!dictConfig) return text;
@@ -569,9 +593,7 @@
         u.volume = 0; window.speechSynthesis.speak(u);
     }
 
-    // =========================================================================
     // UI イベントハンドラー
-    // =========================================================================
     btnStart.addEventListener('click', () => {
         if (!SpeechRecognition) { alert("音声認識未対応ブラウザです。"); return; }
         
@@ -583,7 +605,7 @@
             
             btnStart.textContent = "自動通訳を停止"; 
             btnStart.classList.add('recording');
-            statusText.textContent = "自由にお話しください（順次通訳中）...";
+            statusText.textContent = "自由にお話しください（高速並列中）...";
         } else {
             isRecording = false; 
             if (recognition) {
@@ -595,7 +617,6 @@
         }
     });
 
-    // スピーカー（発話ON/OFF）切替ボタン
     btnTts.addEventListener('click', () => {
         isTtsEnabled = !isTtsEnabled;
         if (isTtsEnabled) {
