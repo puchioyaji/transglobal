@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>リアルタイム グループ通訳システム (自ルーム限定削除対応)</title>
+    <title>リアルタイム グループ通訳システム (完全版)</title>
     <style>
         :root {
             --primary-color: #2196f3;
@@ -159,7 +159,7 @@
 
 <script>
     // ★ 発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec";
+    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
 
     let companyCode = "";
     let roomCode = "";
@@ -168,6 +168,7 @@
     let userIso = "ja";
     let isRecording = false;
     let isTtsEnabled = true;
+    let isSpeakingTTS = false;
     let userId = "user_" + Math.random().toString(36).substr(2, 9);
 
     let processedMsgIds = new Set();
@@ -250,6 +251,7 @@
         pollingTimer = setInterval(fetchMessages, 800);
     });
 
+    // 音声読み上げ（マイク自声拾いループ防止ガード付き）
     function speakText(text, lang) {
         if (!window.speechSynthesis || !isTtsEnabled || !text) return;
 
@@ -261,6 +263,25 @@
         const voices = window.speechSynthesis.getVoices();
         const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0, 2).toLowerCase()));
         if (matchingVoice) utterance.voice = matchingVoice;
+
+        utterance.onstart = () => {
+            isSpeakingTTS = true;
+            if (recognition && isRecording) {
+                try { recognition.stop(); } catch(e){}
+            }
+        };
+
+        const handleFinish = () => {
+            isSpeakingTTS = false;
+            setTimeout(() => {
+                if (recognition && isRecording) {
+                    try { recognition.start(); } catch(e){}
+                }
+            }, 400); // 残響ノイズを考慮して400ms待機後にマイク再開
+        };
+
+        utterance.onend = handleFinish;
+        utterance.onerror = handleFinish;
 
         window.speechSynthesis.speak(utterance);
     }
@@ -278,7 +299,7 @@
     }
 
     async function fetchMessages() {
-        if (!roomCode || isFetching || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
+        if (!roomCode || isFetching || GAS_API_URL === "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec") return;
         isFetching = true;
 
         try {
@@ -287,6 +308,7 @@
 
             if (result.status === 'success' && Array.isArray(result.messages)) {
                 for (const msg of result.messages) {
+                    // 同一IDの二重受信・二重発話ループを絶対阻止
                     if (!processedMsgIds.has(msg.id)) {
                         processedMsgIds.add(msg.id);
 
@@ -421,7 +443,6 @@
         URL.revokeObjectURL(url);
     }
 
-    // 削除処理（自ルーム限定）
     btnClear.addEventListener('click', async () => {
         if (!roomCode || !companyCode) return;
 
@@ -468,6 +489,8 @@
         rec.lang = userLangCode;
 
         rec.onresult = (event) => {
+            if (isSpeakingTTS) return;
+
             let interimTranscript = '';
             let finalTranscript = '';
 
@@ -491,7 +514,7 @@
         };
 
         rec.onend = () => {
-            if (isRecording) {
+            if (isRecording && !isSpeakingTTS) {
                 try { recognition.start(); } catch(e){}
             }
         };
