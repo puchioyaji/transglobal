@@ -159,7 +159,7 @@
 
 <script>
     // ★ 発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec";
+    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
 
     let companyCode = "";
     let roomCode = "";
@@ -453,7 +453,7 @@
         if (confirm(`【警告】企業コード: ${companyCode} / ルームコード: ${roomCode} の会話履歴を削除します。\n（他のルームのデータは保持されます）\n\n本当によろしいですか？`)) {
             statusText.textContent = "自ルームのデータを削除中...";
             try {
-                await fetch(GAS_API_URL, {
+                const response = await fetch(GAS_API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain' },
                     body: JSON.stringify({
@@ -463,14 +463,21 @@
                     })
                 });
 
-                chatHistory.innerHTML = '';
-                processedMsgIds.clear();
-                messageStore = [];
-                statusText.textContent = "自ルームのデータが削除されました";
+                const resData = await response.json();
+                
+                if (resData.status === "success") {
+                    chatHistory.innerHTML = '';
+                    processedMsgIds.clear();
+                    messageStore = [];
+                    statusText.textContent = "自ルームのデータが削除されました";
+                } else {
+                    alert("削除エラー: " + (resData.message || "処理に失敗しました"));
+                    statusText.textContent = "マイク待機中";
+                }
             } catch (e) {
-                alert("削除処理に失敗しました。");
+                alert("通信エラーにより削除処理に失敗しました。");
                 console.error("Delete Error:", e);
-                statusText.textContent = "聴取中...";
+                statusText.textContent = "マイク待機中";
             }
         }
     });
