@@ -79,12 +79,17 @@
             background: #fff; padding: 10px; box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
             display: flex; gap: 8px; z-index: 9999;
         }
+        button {
+            border: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer;
+        }
         #btn-mic {
-            flex: 1; padding: 14px; border: none; border-radius: 8px;
-            background-color: var(--primary-color); color: white;
-            font-weight: bold; font-size: 1rem; cursor: pointer;
+            flex: 2; padding: 14px; background-color: var(--primary-color); color: white;
         }
         #btn-mic.recording { background-color: #ff5252; }
+        #btn-tts {
+            flex: 1; padding: 14px; background-color: #4caf50; color: white;
+        }
+        #btn-tts.muted { background-color: #e0e0e0; color: #757575; }
     </style>
 </head>
 <body>
@@ -127,10 +132,11 @@
 
 <div class="controls">
     <button id="btn-mic">マイク開始</button>
+    <button id="btn-tts">🔊 音声ON</button>
 </div>
 
 <script>
-    // ★ ここに発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
+    // ★ 発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec";
 
     let roomCode = "";
@@ -138,10 +144,12 @@
     let userLangCode = "ja-JP";
     let userIso = "ja";
     let isRecording = false;
+    let isTtsEnabled = true;
     let userId = "user_" + Math.random().toString(36).substr(2, 9);
 
     let processedMsgIds = new Set();
     let pollingTimer = null;
+    let isInitialLoad = true; // 初回読み込み時の過去メッセージ読み上げを回避するフラグ
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
@@ -149,11 +157,22 @@
     const modalLogin = document.getElementById('modal-login');
     const btnJoin = document.getElementById('btn-join');
     const btnMic = document.getElementById('btn-mic');
+    const btnTts = document.getElementById('btn-tts');
     const statusText = document.getElementById('status-text');
     const chatHistory = document.getElementById('chat-history');
     const headerInfo = document.getElementById('header-info');
 
+    // スマホ等のブラウザ自動再生制限を解除（アンロック）する処理
+    function unlockAudio() {
+        if (!window.speechSynthesis) return;
+        const u = new SpeechSynthesisUtterance("");
+        u.volume = 0;
+        window.speechSynthesis.speak(u);
+    }
+
     btnJoin.addEventListener('click', () => {
+        unlockAudio(); // ユーザー操作のタイミングでオーディオ有効化
+
         const roomInput = document.getElementById('input-room').value.trim();
         const nameInput = document.getElementById('input-name').value.trim();
         const langSelect = document.getElementById('select-lang');
@@ -176,8 +195,28 @@
         modalLogin.style.display = 'none';
 
         fetchMessages();
-        pollingTimer = setInterval(fetchMessages, 2000); // 2秒ごとにスプレッドシートの変更を確認
+        pollingTimer = setInterval(fetchMessages, 2000);
     });
+
+    // 音声読み上げ（TTS）実行関数
+    function speakText(text, lang) {
+        if (!window.speechSynthesis || !isTtsEnabled || !text) return;
+
+        // 自分が話している最中は読み上げをスキップ（マイクの拾い直し防止）
+        if (isRecording) return;
+
+        window.speechSynthesis.cancel(); // 前の音声をクリア
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang;
+        utterance.rate = 1.0;
+
+        const voices = window.speechSynthesis.getVoices();
+        const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(lang.substring(0, 2).toLowerCase()));
+        if (matchingVoice) utterance.voice = matchingVoice;
+
+        window.speechSynthesis.speak(utterance);
+    }
 
     async function translateText(text, fromIso, toIso) {
         if (fromIso === toIso || !text) return text;
@@ -204,16 +243,23 @@
                         processedMsgIds.add(msg.id);
 
                         const translated = await translateText(msg.text, msg.fromIso, userIso);
+                        const isSelf = msg.userId === userId;
 
                         renderMessageUI({
                             sender: msg.sender,
                             time: msg.time,
                             originalText: msg.text,
                             translatedText: translated,
-                            isSelf: msg.userId === userId
+                            isSelf: isSelf
                         });
+
+                        // 初回受信以外かつ他人の発言であれば音声読み上げ実行
+                        if (!isInitialLoad && !isSelf) {
+                            speakText(translated, userLangCode);
+                        }
                     }
                 }
+                isInitialLoad = false;
             }
         } catch (e) {
             console.error("Polling Error:", e);
@@ -226,7 +272,7 @@
         try {
             await fetch(GAS_API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'text/plain' }, // GASのCORS回避用
+                headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
                     room: roomCode,
                     userId: userId,
@@ -308,6 +354,7 @@
 
     btnMic.addEventListener('click', () => {
         if (!roomCode) return;
+        unlockAudio();
 
         if (!isRecording) {
             isRecording = true;
@@ -329,6 +376,24 @@
             statusText.textContent = "マイク停止中";
         }
     });
+
+    btnTts.addEventListener('click', () => {
+        isTtsEnabled = !isTtsEnabled;
+        if (isTtsEnabled) {
+            btnTts.textContent = "🔊 音声ON";
+            btnTts.classList.remove('muted');
+        } else {
+            btnTts.textContent = "🔇 音声OFF";
+            btnTts.classList.add('muted');
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        }
+    });
+
+    // 音声エンジンの事前ロード
+    if (window.speechSynthesis) {
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
+    }
 </script>
 </body>
 </html>
