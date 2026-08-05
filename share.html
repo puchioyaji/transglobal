@@ -26,9 +26,10 @@
         .login-card {
             background: white; padding: 24px; border-radius: 12px;
             width: 85%; max-width: 360px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            max-height: 90vh; overflow-y: auto;
         }
         .login-card h2 { margin-top: 0; font-size: 1.2rem; text-align: center; }
-        .input-group { margin-bottom: 14px; }
+        .input-group { margin-bottom: 12px; }
         .input-group label { display: block; font-size: 0.85rem; margin-bottom: 4px; color: #555; }
         .input-group input, .input-group select {
             width: 100%; padding: 10px; border: 1px solid #ccc;
@@ -37,7 +38,7 @@
         .btn-join {
             width: 100%; padding: 12px; background: var(--primary-color);
             color: white; border: none; border-radius: 6px;
-            font-weight: bold; font-size: 1rem; cursor: pointer;
+            font-weight: bold; font-size: 1rem; cursor: pointer; margin-top: 8px;
         }
 
         header {
@@ -45,7 +46,7 @@
             display: flex; justify-content: space-between; align-items: center;
             flex-shrink: 0;
         }
-        .header-info { font-size: 0.85rem; opacity: 0.9; }
+        .header-info { font-size: 0.8rem; opacity: 0.9; text-align: right; }
         
         .container {
             flex: 1; display: flex; flex-direction: column;
@@ -98,22 +99,38 @@
     <div class="login-card">
         <h2>グループ通訳に参加</h2>
         <div class="input-group">
-            <label>5桁のルームコード</label>
-            <input type="text" id="input-room" maxlength="5" placeholder="例: 12345" value="12345">
+            <label>企業コード (10桁)</label>
+            <input type="text" id="input-company" maxlength="10" placeholder="例: 1234567890">
+        </div>
+        <div class="input-group">
+            <label>ルームコード (5桁)</label>
+            <input type="text" id="input-room" maxlength="5" placeholder="例: 12345">
         </div>
         <div class="input-group">
             <label>あなたの名前</label>
-            <input type="text" id="input-name" placeholder="例: 山本" value="ユーザー1">
+            <input type="text" id="input-name" placeholder="例: 山本">
         </div>
         <div class="input-group">
             <label>話す・読む言語</label>
             <select id="select-lang">
                 <option value="ja-JP" data-iso="ja" selected>日本語</option>
-                <option value="en-US" data-iso="en">英語</option>
+                <option value="en-US" data-iso="en">英語 (US)</option>
                 <option value="zh-CN" data-iso="zh">中国語 (簡体)</option>
+                <option value="zh-TW" data-iso="zh">中国語 (繁体)</option>
                 <option value="ko-KR" data-iso="ko">韓国語</option>
+                <option value="vi-VN" data-iso="vi">ベトナム語</option>
+                <option value="id-ID" data-iso="id">インドネシア語</option>
+                <option value="my-MM" data-iso="my">ミャンマー語 (ビルマ語)</option>
+                <option value="pt-BR" data-iso="pt">ポルトガル語 (ブラジル)</option>
+                <option value="tl-PH" data-iso="tl">タガログ語 (フィリピン)</option>
+                <option value="th-TH" data-iso="th">タイ語</option>
+                <option value="ms-MY" data-iso="ms">マレー語</option>
+                <option value="hi-IN" data-iso="hi">ヒンディー語</option>
+                <option value="ne-NP" data-iso="ne">ネパール語</option>
                 <option value="es-ES" data-iso="es">スペイン語</option>
                 <option value="fr-FR" data-iso="fr">フランス語</option>
+                <option value="de-DE" data-iso="de">ドイツ語</option>
+                <option value="ru-RU" data-iso="ru">ロシア語</option>
             </select>
         </div>
         <button class="btn-join" id="btn-join">接続して開始</button>
@@ -139,6 +156,7 @@
     // ★ 発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec";
 
+    let companyCode = "";
     let roomCode = "";
     let userName = "";
     let userLangCode = "ja-JP";
@@ -162,6 +180,24 @@
     const chatHistory = document.getElementById('chat-history');
     const headerInfo = document.getElementById('header-info');
 
+    const inputCompany = document.getElementById('input-company');
+    const inputRoom = document.getElementById('input-room');
+    const inputName = document.getElementById('input-name');
+    const selectLang = document.getElementById('select-lang');
+
+    // 前回入力した設定をローカルストレージから復元
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedCompany = localStorage.getItem('trans_company');
+        const savedRoom = localStorage.getItem('trans_room');
+        const savedName = localStorage.getItem('trans_name');
+        const savedLang = localStorage.getItem('trans_lang');
+
+        if (savedCompany) inputCompany.value = savedCompany;
+        if (savedRoom) inputRoom.value = savedRoom;
+        if (savedName) inputName.value = savedName;
+        if (savedLang) selectLang.value = savedLang;
+    });
+
     function unlockAudio() {
         if (!window.speechSynthesis) return;
         const u = new SpeechSynthesisUtterance("");
@@ -172,12 +208,16 @@
     btnJoin.addEventListener('click', () => {
         unlockAudio();
 
-        const roomInput = document.getElementById('input-room').value.trim();
-        const nameInput = document.getElementById('input-name').value.trim();
-        const langSelect = document.getElementById('select-lang');
+        const companyInput = inputCompany.value.trim();
+        const roomInput = inputRoom.value.trim();
+        const nameInput = inputName.value.trim();
 
+        if (companyInput.length !== 10 || !/^\d+$/.test(companyInput)) {
+            alert("企業コードは10桁の数字で入力してください。");
+            return;
+        }
         if (roomInput.length !== 5 || !/^\d+$/.test(roomInput)) {
-            alert("5桁の数字コードを入力してください。");
+            alert("ルームコードは5桁の数字で入力してください。");
             return;
         }
         if (!nameInput) {
@@ -185,16 +225,22 @@
             return;
         }
 
+        companyCode = companyInput;
         roomCode = roomInput;
         userName = nameInput;
-        userLangCode = langSelect.value;
-        userIso = langSelect.options[langSelect.selectedIndex].getAttribute('data-iso');
+        userLangCode = selectLang.value;
+        userIso = selectLang.options[selectLang.selectedIndex].getAttribute('data-iso');
 
-        headerInfo.textContent = `Room: ${roomCode} | ${userName} (${userIso.toUpperCase()})`;
+        // 次回自動入力のためにブラウザへ保存
+        localStorage.setItem('trans_company', companyCode);
+        localStorage.setItem('trans_room', roomCode);
+        localStorage.setItem('trans_name', userName);
+        localStorage.setItem('trans_lang', userLangCode);
+
+        headerInfo.innerHTML = `企業: ${companyCode}<br>Room: ${roomCode} | ${userName}`;
         modalLogin.style.display = 'none';
 
         fetchMessages();
-        // ★ ポーリング間隔を 2000ms から 1000ms（1秒）に高速化
         pollingTimer = setInterval(fetchMessages, 1000);
     });
 
@@ -230,7 +276,7 @@
         if (!roomCode || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
 
         try {
-            const res = await fetch(`${GAS_API_URL}?room=${roomCode}`);
+            const res = await fetch(`${GAS_API_URL}?room=${roomCode}&company=${companyCode}`);
             const result = await res.json();
 
             if (result.status === 'success' && Array.isArray(result.messages)) {
@@ -249,7 +295,6 @@
                             isSelf: isSelf
                         });
 
-                        // ★ 他人の発言であれば、マイクのON/OFF状態に関わらず音声読み上げを実行
                         if (!isInitialLoad && !isSelf) {
                             speakText(translated, userLangCode);
                         }
@@ -270,6 +315,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
+                    company: companyCode,
                     room: roomCode,
                     userId: userId,
                     sender: userName,
@@ -278,7 +324,6 @@
                 })
             });
 
-            // 送信後、即時に取得APIを叩いて画面を更新
             fetchMessages();
         } catch (e) {
             console.error("Send Error:", e);
