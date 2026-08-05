@@ -159,7 +159,7 @@
 
 <script>
     // ★ 発行されたGoogle Apps ScriptのウェブアプリURLを貼り付けてください
-    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL_HERE";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec";
 
     let companyCode = "";
     let roomCode = "";
@@ -251,7 +251,6 @@
         pollingTimer = setInterval(fetchMessages, 800);
     });
 
-    // 音声読み上げ（マイク自声拾いループ防止ガード付き）
     function speakText(text, lang) {
         if (!window.speechSynthesis || !isTtsEnabled || !text) return;
 
@@ -277,7 +276,7 @@
                 if (recognition && isRecording) {
                     try { recognition.start(); } catch(e){}
                 }
-            }, 400); // 残響ノイズを考慮して400ms待機後にマイク再開
+            }, 400);
         };
 
         utterance.onend = handleFinish;
@@ -299,7 +298,7 @@
     }
 
     async function fetchMessages() {
-        if (!roomCode || isFetching || GAS_API_URL === "https://script.google.com/macros/s/AKfycby0tz4dHBflAoxYQvmvFOUy3_EbW7AYJS3MZZv6yGozkSs8LvJiTQfn8JQRYGa4HQM/exec") return;
+        if (!roomCode || isFetching || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
         isFetching = true;
 
         try {
@@ -308,7 +307,6 @@
 
             if (result.status === 'success' && Array.isArray(result.messages)) {
                 for (const msg of result.messages) {
-                    // 同一IDの二重受信・二重発話ループを絶対阻止
                     if (!processedMsgIds.has(msg.id)) {
                         processedMsgIds.add(msg.id);
 
