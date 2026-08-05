@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>リアルタイム グループ通訳システム (高速版)</title>
+    <title>リアルタイム グループ通訳システム (自ルーム限定削除対応)</title>
     <style>
         :root {
             --primary-color: #2196f3;
@@ -79,19 +79,22 @@
         .controls {
             position: fixed; bottom: 0; left: 0; right: 0;
             background: #fff; padding: 10px; box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
-            display: flex; gap: 8px; z-index: 9999;
+            display: flex; gap: 6px; z-index: 9999;
         }
         button {
-            border: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; cursor: pointer;
+            border: none; border-radius: 8px; font-weight: bold; font-size: 0.85rem; cursor: pointer;
         }
         #btn-mic {
-            flex: 2; padding: 14px; background-color: var(--primary-color); color: white;
+            flex: 2; padding: 14px 4px; background-color: var(--primary-color); color: white;
         }
         #btn-mic.recording { background-color: #ff5252; }
         #btn-tts {
-            flex: 1; padding: 14px; background-color: #4caf50; color: white;
+            flex: 1; padding: 14px 4px; background-color: #4caf50; color: white;
         }
         #btn-tts.muted { background-color: #e0e0e0; color: #757575; }
+        #btn-clear {
+            flex: 1; padding: 14px 4px; background-color: #e53935; color: white;
+        }
     </style>
 </head>
 <body>
@@ -151,6 +154,7 @@
 <div class="controls">
     <button id="btn-mic">マイク開始</button>
     <button id="btn-tts">🔊 音声ON</button>
+    <button id="btn-clear">🗑️ データ削除</button>
 </div>
 
 <script>
@@ -167,6 +171,7 @@
     let userId = "user_" + Math.random().toString(36).substr(2, 9);
 
     let processedMsgIds = new Set();
+    let messageStore = [];
     let pollingTimer = null;
     let isFetching = false;
     let isInitialLoad = true;
@@ -178,6 +183,7 @@
     const btnJoin = document.getElementById('btn-join');
     const btnMic = document.getElementById('btn-mic');
     const btnTts = document.getElementById('btn-tts');
+    const btnClear = document.getElementById('btn-clear');
     const statusText = document.getElementById('status-text');
     const chatHistory = document.getElementById('chat-history');
     const headerInfo = document.getElementById('header-info');
@@ -241,7 +247,6 @@
         modalLogin.style.display = 'none';
 
         fetchMessages();
-        // ポーリング間隔を800msに高速化
         pollingTimer = setInterval(fetchMessages, 800);
     });
 
@@ -287,10 +292,8 @@
 
                         const isSelf = msg.userId === userId;
 
-                        // 自分の発言で、すでに楽観的UIで描画済みの場合はスキップ
                         if (isSelf && document.getElementById(msg.id)) continue;
 
-                        // 1. 原文を0秒で画面に先行レンダリング
                         renderMessageUI({
                             id: msg.id,
                             sender: msg.sender,
@@ -301,16 +304,19 @@
                             isLoading: msg.fromIso !== userIso
                         });
 
-                        // 2. 翻訳を非同期でバックグラウンド実行（画面表示を止めない）
                         if (msg.fromIso !== userIso) {
                             translateText(msg.text, msg.fromIso, userIso).then((translated) => {
                                 updateMessageTranslation(msg.id, translated);
+                                storeMessageData(msg.time, msg.sender, msg.text, translated);
                                 if (!isInitialLoad && !isSelf) {
                                     speakText(translated, userLangCode);
                                 }
                             });
-                        } else if (!isInitialLoad && !isSelf) {
-                            speakText(msg.text, userLangCode);
+                        } else {
+                            storeMessageData(msg.time, msg.sender, msg.text, msg.text);
+                            if (!isInitialLoad && !isSelf) {
+                                speakText(msg.text, userLangCode);
+                            }
                         }
                     }
                 }
@@ -323,20 +329,24 @@
         }
     }
 
+    function storeMessageData(time, sender, original, translated) {
+        messageStore.push({ time, sender, original, translated });
+    }
+
     async function sendSpeechToServer(text) {
         if (!text || !roomCode || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
 
-        // ★ 楽観的UI更新：自分の音声認識テキストは0秒で自画面へ描画
         const tempId = "msg_local_" + Date.now();
         const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         processedMsgIds.add(tempId);
+        storeMessageData(timeStr, userName, text, text);
 
         renderMessageUI({
             id: tempId,
             sender: userName,
             time: timeStr,
             originalText: text,
-            translatedText: text, // 自言語なのでそのまま表示
+            translatedText: text,
             isSelf: true,
             isLoading: false
         });
@@ -389,6 +399,62 @@
     function escapeHtml(str) {
         return str.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
     }
+
+    function downloadCSV() {
+        if (messageStore.length === 0) return;
+
+        let csvContent = "\uFEFF時刻,送信者,原文,訳文\n";
+        messageStore.forEach(row => {
+            const time = `"${row.time.replace(/"/g, '""')}"`;
+            const sender = `"${row.sender.replace(/"/g, '""')}"`;
+            const original = `"${row.original.replace(/"/g, '""')}"`;
+            const translated = `"${row.translated.replace(/"/g, '""')}"`;
+            csvContent += `${time},${sender},${original},${translated}\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `translation_log_${companyCode}_${roomCode}_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // 削除処理（自ルーム限定）
+    btnClear.addEventListener('click', async () => {
+        if (!roomCode || !companyCode) return;
+
+        const downloadConfirm = confirm(`[企業:${companyCode} / ルーム:${roomCode}]\n\n削除前にこのルームの会話履歴をCSVでダウンロードしますか？\n\n【OK】: CSV出力後にデータを削除\n【キャンセル】: CSV出力せずにデータ削除へ進む`);
+
+        if (downloadConfirm) {
+            downloadCSV();
+        }
+
+        if (confirm(`【警告】企業コード: ${companyCode} / ルームコード: ${roomCode} の会話履歴を削除します。\n（他のルームのデータは保持されます）\n\n本当によろしいですか？`)) {
+            statusText.textContent = "自ルームのデータを削除中...";
+            try {
+                await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({
+                        action: "delete",
+                        company: companyCode,
+                        room: roomCode
+                    })
+                });
+
+                chatHistory.innerHTML = '';
+                processedMsgIds.clear();
+                messageStore = [];
+                statusText.textContent = "自ルームのデータが削除されました";
+            } catch (e) {
+                alert("削除処理に失敗しました。");
+                console.error("Delete Error:", e);
+                statusText.textContent = "聴取中...";
+            }
+        }
+    });
 
     function initSpeechRecognition() {
         if (!SpeechRecognition) {
