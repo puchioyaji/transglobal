@@ -356,6 +356,9 @@
 
     let lastSpeakingEndTime = 0;
     let lastProcessedText = "";
+    
+    // アンチエコー用：アプリが直近に発話したテキスト群を管理
+    const recentTtsSpokenTexts = new Set();
 
     const btnStart = document.getElementById('btn-start');
     const btnTts = document.getElementById('btn-tts');
@@ -397,21 +400,28 @@
 
         if (!cleaned || cleaned.length < 1) return;
 
-        // TTS動作中、または直後（300msガード）はスキップ
-        if (isSpeaking || Date.now() - lastSpeakingEndTime < 300) {
+        // 【ガード1】TTS再生中および再生後1200ms以内は音漏れとみなし破棄
+        if (isSpeaking || Date.now() - lastSpeakingEndTime < 1200) {
             return;
+        }
+
+        // 【ガード2：アンチエコー】アプリ自身が喋ったテキストと同じ（または含む）場合は即座に破棄
+        const lowerCleaned = cleaned.toLowerCase();
+        for (let spoken of recentTtsSpokenTexts) {
+            if (lowerCleaned.includes(spoken) || spoken.includes(lowerCleaned)) {
+                return;
+            }
         }
 
         // 直前と完全同一のテキストの重複排除
         if (cleaned === lastProcessedText) return;
         lastProcessedText = cleaned;
-        setTimeout(() => { if (lastProcessedText === cleaned) lastProcessedText = ""; }, 1500);
+        setTimeout(() => { if (lastProcessedText === cleaned) lastProcessedText = ""; }, 2000);
 
         processingQueue.push(cleaned);
         triggerProcessingEngine();
     }
 
-    // 連続発話でも処理落ちしない非同期ループ制御
     async function triggerProcessingEngine() {
         if (isProcessing) return;
         isProcessing = true;
@@ -504,12 +514,20 @@
         if (isSpeaking || ttsQueue.length === 0 || !isTtsEnabled) return;
         isSpeaking = true;
 
-        // ★ 読み上げ開始時に音声認識を安全に一時停止（TTSの自己拾いを物理遮断）
+        // マイク停止を試行（バックグラウンド停止処理）
         if (recognition && isRecording) {
             try { recognition.stop(); } catch(e){}
         }
 
         const task = ttsQueue.shift();
+        
+        // 喋らせる言葉をアンチエコーリストに登録（小文字で保管）
+        const spokenTarget = task.text.toLowerCase().trim();
+        recentTtsSpokenTexts.add(spokenTarget);
+        setTimeout(() => {
+            recentTtsSpokenTexts.delete(spokenTarget);
+        }, 8000); // 8秒間記憶
+
         const utterance = new SpeechSynthesisUtterance(task.text);
         utterance.lang = task.lang; 
         utterance.pitch = task.pitch; 
@@ -523,12 +541,12 @@
             isSpeaking = false;
             lastSpeakingEndTime = Date.now();
 
-            // ★ 読み上げ完了後に音声認識を再開
+            // 1200msの保護期間を置いてからマイク認識を完全に再起動
             setTimeout(() => {
-                if (isRecording && recognition) {
+                if (isRecording && recognition && !isSpeaking) {
                     try { recognition.start(); } catch(e){}
                 }
-            }, 200);
+            }, 300);
 
             triggerTTSEngine();
         };
@@ -551,8 +569,8 @@
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
-            // TTS再生中・直後は発話を読み込まない
-            if (isSpeaking || Date.now() - lastSpeakingEndTime < 300) return;
+            // TTS再生中・直後のガード（マイクバッファ残響の完全無視）
+            if (isSpeaking || Date.now() - lastSpeakingEndTime < 1200) return;
 
             let interimTranscript = '';
             let finalTranscript = '';
@@ -566,20 +584,20 @@
                 }
             }
 
-            // 1. 確定データ（isFinal = true）のみをキューへ投入
+            // 1. 確定データ（isFinal = true）のみを処理へ渡す
             if (finalTranscript.trim()) {
                 enqueueRecognizedText(finalTranscript.trim());
             } 
 
-            // 2. 未確定データ（interim）はステータス表示のみに活用
+            // 2. 未確定データ（interim）は画面プレビュー表示のみ
             if (interimTranscript.trim()) {
                 statusText.textContent = `認識中... ${interimTranscript.trim()}`;
             }
         };
 
         rec.onend = () => {
-            // TTS発話中以外で切断された場合は即座に再接続
-            if (isRecording && !isSpeaking) {
+            // TTS再生中でない場合のみ再接続を試行
+            if (isRecording && !isSpeaking && Date.now() - lastSpeakingEndTime >= 1200) {
                 try { recognition.start(); } catch(e){}
             }
         };
@@ -692,6 +710,7 @@
             processingQueue.length = 0;
             ttsQueue.length = 0;
             lastProcessedText = "";
+            recentTtsSpokenTexts.clear();
             outLang1.textContent="待機中..."; 
             outLang2.textContent="---"; 
             outLang3.textContent="---"; 
