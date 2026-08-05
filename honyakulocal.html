@@ -397,12 +397,12 @@
 
         if (!cleaned || cleaned.length < 1) return;
 
-        // TTS直後の自声拾い対策（400msのみブロック）
-        if (isSpeaking || Date.now() - lastSpeakingEndTime < 400) {
+        // TTS動作中、または直後（300msガード）はスキップ
+        if (isSpeaking || Date.now() - lastSpeakingEndTime < 300) {
             return;
         }
 
-        // 直前と完全同一のテキストの瞬時重複だけ除外（連続発話を阻害しない）
+        // 直前と完全同一のテキストの重複排除
         if (cleaned === lastProcessedText) return;
         lastProcessedText = cleaned;
         setTimeout(() => { if (lastProcessedText === cleaned) lastProcessedText = ""; }, 1500);
@@ -411,7 +411,7 @@
         triggerProcessingEngine();
     }
 
-    // 連続発話でも絶対に落とさない非同期ループ制御
+    // 連続発話でも処理落ちしない非同期ループ制御
     async function triggerProcessingEngine() {
         if (isProcessing) return;
         isProcessing = true;
@@ -423,7 +423,6 @@
             } catch (err) {
                 console.error("Pipeline Error:", err);
             }
-            // UIスレッドを解放して処理落ちを防止
             await new Promise(r => setTimeout(r, 10));
         }
         isProcessing = false;
@@ -505,6 +504,11 @@
         if (isSpeaking || ttsQueue.length === 0 || !isTtsEnabled) return;
         isSpeaking = true;
 
+        // ★ 読み上げ開始時に音声認識を安全に一時停止（TTSの自己拾いを物理遮断）
+        if (recognition && isRecording) {
+            try { recognition.stop(); } catch(e){}
+        }
+
         const task = ttsQueue.shift();
         const utterance = new SpeechSynthesisUtterance(task.text);
         utterance.lang = task.lang; 
@@ -518,6 +522,14 @@
         const onFinish = () => {
             isSpeaking = false;
             lastSpeakingEndTime = Date.now();
+
+            // ★ 読み上げ完了後に音声認識を再開
+            setTimeout(() => {
+                if (isRecording && recognition) {
+                    try { recognition.start(); } catch(e){}
+                }
+            }, 200);
+
             triggerTTSEngine();
         };
 
@@ -528,7 +540,7 @@
     }
 
     // =========================================================================
-    // 【連続発話・追従強化】音声認識エンジン
+    // 【決定版】音声認識エンジン
     // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
@@ -539,25 +551,35 @@
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
-            if (isSpeaking) return;
+            // TTS再生中・直後は発話を読み込まない
+            if (isSpeaking || Date.now() - lastSpeakingEndTime < 300) return;
+
+            let interimTranscript = '';
+            let finalTranscript = '';
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 const transcript = event.results[i][0].transcript;
-                // 確定（isFinal）した発言を1つ残らずキューへ即投入
                 if (event.results[i].isFinal) {
-                    if (transcript.trim()) {
-                        enqueueRecognizedText(transcript.trim());
-                    }
+                    finalTranscript += transcript;
                 } else {
-                    // 認識途中の表示更新
-                    statusText.textContent = `認識中... ${transcript}`;
+                    interimTranscript += transcript;
                 }
+            }
+
+            // 1. 確定データ（isFinal = true）のみをキューへ投入
+            if (finalTranscript.trim()) {
+                enqueueRecognizedText(finalTranscript.trim());
+            } 
+
+            // 2. 未確定データ（interim）はステータス表示のみに活用
+            if (interimTranscript.trim()) {
+                statusText.textContent = `認識中... ${interimTranscript.trim()}`;
             }
         };
 
         rec.onend = () => {
-            // 連続発話中にエンジンが切断されても即座に再起動して漏れを防ぐ
-            if (isRecording) {
+            // TTS発話中以外で切断された場合は即座に再接続
+            if (isRecording && !isSpeaking) {
                 try { recognition.start(); } catch(e){}
             }
         };
