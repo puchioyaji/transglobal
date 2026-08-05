@@ -149,7 +149,7 @@
 
     let processedMsgIds = new Set();
     let pollingTimer = null;
-    let isInitialLoad = true; // 初回読み込み時の過去メッセージ読み上げを回避するフラグ
+    let isInitialLoad = true; 
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
@@ -162,7 +162,6 @@
     const chatHistory = document.getElementById('chat-history');
     const headerInfo = document.getElementById('header-info');
 
-    // スマホ等のブラウザ自動再生制限を解除（アンロック）する処理
     function unlockAudio() {
         if (!window.speechSynthesis) return;
         const u = new SpeechSynthesisUtterance("");
@@ -171,7 +170,7 @@
     }
 
     btnJoin.addEventListener('click', () => {
-        unlockAudio(); // ユーザー操作のタイミングでオーディオ有効化
+        unlockAudio();
 
         const roomInput = document.getElementById('input-room').value.trim();
         const nameInput = document.getElementById('input-name').value.trim();
@@ -195,17 +194,14 @@
         modalLogin.style.display = 'none';
 
         fetchMessages();
-        pollingTimer = setInterval(fetchMessages, 2000);
+        // ★ ポーリング間隔を 2000ms から 1000ms（1秒）に高速化
+        pollingTimer = setInterval(fetchMessages, 1000);
     });
 
-    // 音声読み上げ（TTS）実行関数
     function speakText(text, lang) {
         if (!window.speechSynthesis || !isTtsEnabled || !text) return;
 
-        // 自分が話している最中は読み上げをスキップ（マイクの拾い直し防止）
-        if (isRecording) return;
-
-        window.speechSynthesis.cancel(); // 前の音声をクリア
+        window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = lang;
@@ -253,7 +249,7 @@
                             isSelf: isSelf
                         });
 
-                        // 初回受信以外かつ他人の発言であれば音声読み上げ実行
+                        // ★ 他人の発言であれば、マイクのON/OFF状態に関わらず音声読み上げを実行
                         if (!isInitialLoad && !isSelf) {
                             speakText(translated, userLangCode);
                         }
@@ -282,7 +278,8 @@
                 })
             });
 
-            setTimeout(fetchMessages, 500);
+            // 送信後、即時に取得APIを叩いて画面を更新
+            fetchMessages();
         } catch (e) {
             console.error("Send Error:", e);
         }
@@ -389,7 +386,6 @@
         }
     });
 
-    // 音声エンジンの事前ロード
     if (window.speechSynthesis) {
         window.speechSynthesis.getVoices();
         window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.getVoices(); };
