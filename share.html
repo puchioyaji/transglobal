@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>リアルタイム グループ通訳システム</title>
+    <title>リアルタイム グループ通訳システム (高速版)</title>
     <style>
         :root {
             --primary-color: #2196f3;
@@ -73,7 +73,8 @@
         .msg-meta { font-size: 0.75rem; opacity: 0.7; margin-bottom: 4px; display: flex; justify-content: space-between; gap: 8px; }
         .msg-sender { font-weight: bold; }
         .msg-original { font-size: 0.78rem; opacity: 0.6; border-bottom: 1px dashed rgba(0,0,0,0.15); padding-bottom: 4px; margin-bottom: 4px; }
-        .msg-trans { font-size: 1.05rem; font-weight: bold; }
+        .msg-trans { font-size: 1.05rem; font-weight: bold; min-height: 1.2em; }
+        .loading-text { opacity: 0.5; font-style: italic; }
 
         .controls {
             position: fixed; bottom: 0; left: 0; right: 0;
@@ -167,7 +168,8 @@
 
     let processedMsgIds = new Set();
     let pollingTimer = null;
-    let isInitialLoad = true; 
+    let isFetching = false;
+    let isInitialLoad = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
@@ -185,7 +187,6 @@
     const inputName = document.getElementById('input-name');
     const selectLang = document.getElementById('select-lang');
 
-    // 前回入力した設定をローカルストレージから復元
     window.addEventListener('DOMContentLoaded', () => {
         const savedCompany = localStorage.getItem('trans_company');
         const savedRoom = localStorage.getItem('trans_room');
@@ -231,7 +232,6 @@
         userLangCode = selectLang.value;
         userIso = selectLang.options[selectLang.selectedIndex].getAttribute('data-iso');
 
-        // 次回自動入力のためにブラウザへ保存
         localStorage.setItem('trans_company', companyCode);
         localStorage.setItem('trans_room', roomCode);
         localStorage.setItem('trans_name', userName);
@@ -241,14 +241,14 @@
         modalLogin.style.display = 'none';
 
         fetchMessages();
-        pollingTimer = setInterval(fetchMessages, 1000);
+        // ポーリング間隔を800msに高速化
+        pollingTimer = setInterval(fetchMessages, 800);
     });
 
     function speakText(text, lang) {
         if (!window.speechSynthesis || !isTtsEnabled || !text) return;
 
         window.speechSynthesis.cancel();
-
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = lang;
         utterance.rate = 1.0;
@@ -273,7 +273,8 @@
     }
 
     async function fetchMessages() {
-        if (!roomCode || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
+        if (!roomCode || isFetching || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
+        isFetching = true;
 
         try {
             const res = await fetch(`${GAS_API_URL}?room=${roomCode}&company=${companyCode}`);
@@ -284,19 +285,32 @@
                     if (!processedMsgIds.has(msg.id)) {
                         processedMsgIds.add(msg.id);
 
-                        const translated = await translateText(msg.text, msg.fromIso, userIso);
                         const isSelf = msg.userId === userId;
 
+                        // 自分の発言で、すでに楽観的UIで描画済みの場合はスキップ
+                        if (isSelf && document.getElementById(msg.id)) continue;
+
+                        // 1. 原文を0秒で画面に先行レンダリング
                         renderMessageUI({
+                            id: msg.id,
                             sender: msg.sender,
                             time: msg.time,
                             originalText: msg.text,
-                            translatedText: translated,
-                            isSelf: isSelf
+                            translatedText: msg.fromIso === userIso ? msg.text : "翻訳中...",
+                            isSelf: isSelf,
+                            isLoading: msg.fromIso !== userIso
                         });
 
-                        if (!isInitialLoad && !isSelf) {
-                            speakText(translated, userLangCode);
+                        // 2. 翻訳を非同期でバックグラウンド実行（画面表示を止めない）
+                        if (msg.fromIso !== userIso) {
+                            translateText(msg.text, msg.fromIso, userIso).then((translated) => {
+                                updateMessageTranslation(msg.id, translated);
+                                if (!isInitialLoad && !isSelf) {
+                                    speakText(translated, userLangCode);
+                                }
+                            });
+                        } else if (!isInitialLoad && !isSelf) {
+                            speakText(msg.text, userLangCode);
                         }
                     }
                 }
@@ -304,11 +318,28 @@
             }
         } catch (e) {
             console.error("Polling Error:", e);
+        } finally {
+            isFetching = false;
         }
     }
 
     async function sendSpeechToServer(text) {
         if (!text || !roomCode || GAS_API_URL === "YOUR_GAS_WEB_APP_URL_HERE") return;
+
+        // ★ 楽観的UI更新：自分の音声認識テキストは0秒で自画面へ描画
+        const tempId = "msg_local_" + Date.now();
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        processedMsgIds.add(tempId);
+
+        renderMessageUI({
+            id: tempId,
+            sender: userName,
+            time: timeStr,
+            originalText: text,
+            translatedText: text, // 自言語なのでそのまま表示
+            isSelf: true,
+            isLoading: false
+        });
 
         try {
             await fetch(GAS_API_URL, {
@@ -323,7 +354,6 @@
                     fromIso: userIso
                 })
             });
-
             fetchMessages();
         } catch (e) {
             console.error("Send Error:", e);
@@ -332,6 +362,7 @@
 
     function renderMessageUI(data) {
         const box = document.createElement('div');
+        box.id = data.id;
         box.className = `msg-box ${data.isSelf ? 'msg-self' : 'msg-other'}`;
 
         box.innerHTML = `
@@ -340,11 +371,19 @@
                 <span>${data.time}</span>
             </div>
             <div class="msg-original">${escapeHtml(data.originalText)}</div>
-            <div class="msg-trans">${escapeHtml(data.translatedText)}</div>
+            <div class="msg-trans ${data.isLoading ? 'loading-text' : ''}" id="trans_${data.id}">${escapeHtml(data.translatedText)}</div>
         `;
 
         chatHistory.appendChild(box);
         chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function updateMessageTranslation(msgId, translatedText) {
+        const el = document.getElementById(`trans_${msgId}`);
+        if (el) {
+            el.textContent = translatedText;
+            el.classList.remove('loading-text');
+        }
     }
 
     function escapeHtml(str) {
