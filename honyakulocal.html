@@ -354,8 +354,9 @@
     let isTtsEnabled = true; 
     let historyData = [];
 
-    let lastRecognizedText = "";
-    let duplicateResetTimer = null;
+    // 重複防止＆TTSフィードバック対策変数
+    const recentSentences = new Set();
+    let lastSpeakingEndTime = 0;
 
     const btnStart = document.getElementById('btn-start');
     const btnTts = document.getElementById('btn-tts');
@@ -397,12 +398,18 @@
 
         if (!cleaned || cleaned.length < 1) return;
 
-        // 重複防止（完全一致のみ弾く）
-        if (cleaned === lastRecognizedText) return;
+        // TTS発話中、または発話直後（2秒以内）は読み上げ声の誤拾いを防ぐ
+        if (isSpeaking || Date.now() - lastSpeakingEndTime < 2000) {
+            return;
+        }
 
-        lastRecognizedText = cleaned;
-        if (duplicateResetTimer) clearTimeout(duplicateResetTimer);
-        duplicateResetTimer = setTimeout(() => { lastRecognizedText = ""; }, 1500);
+        // 直近4秒間に処理された同一フレーズは破棄
+        if (recentSentences.has(cleaned)) return;
+
+        recentSentences.add(cleaned);
+        setTimeout(() => {
+            recentSentences.delete(cleaned);
+        }, 4000);
 
         processingQueue.push(cleaned);
         triggerProcessingEngine();
@@ -509,55 +516,50 @@
         const matchingVoice = voices.find(v => v.lang.toLowerCase().startsWith(task.lang.substring(0,2).toLowerCase()));
         if (matchingVoice) utterance.voice = matchingVoice;
 
-        utterance.onend = () => {
+        const onFinish = () => {
             isSpeaking = false;
+            lastSpeakingEndTime = Date.now();
             triggerTTSEngine();
         };
 
-        utterance.onerror = (e) => {
-            isSpeaking = false;
-            triggerTTSEngine();
-        };
+        utterance.onend = onFinish;
+        utterance.onerror = onFinish;
 
         window.speechSynthesis.speak(utterance);
     }
 
     // =========================================================================
-    // 【欠落防止チューニング】音声認識エンジン
+    // 【音声認識エンジン】
     // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
         
         const rec = new SpeechRecognition();
-        rec.continuous = true;       
-        rec.interimResults = true; // ★ リアルタイムに推敲結果を追跡して欠落防止
+        rec.continuous = true;        
+        rec.interimResults = true;
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
+            // 発話中および直後は音声入力を受け取らない
+            if (isSpeaking || Date.now() - lastSpeakingEndTime < 2000) return;
+
             let interimTranscript = '';
-            let finalTranscript = '';
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
+                const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    finalTranscript += event.results[i][0].transcript;
+                    enqueueRecognizedText(transcript.trim());
                 } else {
-                    interimTranscript += event.results[i][0].transcript;
+                    interimTranscript += transcript;
                 }
             }
 
-            // 途中経過をステータスバーに表示（認識していることを可視化）
             if (interimTranscript) {
                 statusText.textContent = `認識中... ${interimTranscript}`;
-            }
-
-            // 確定した言葉は漏らさずキューへ投入
-            if (finalTranscript.trim()) {
-                enqueueRecognizedText(finalTranscript.trim());
             }
         };
 
         rec.onend = () => {
-            // 切断されたら待ち時間ゼロで即座に再接続（話頭・話尾の切り捨て防止）
             if (isRecording) {
                 try { recognition.start(); } catch(e){}
             }
@@ -670,7 +672,7 @@
             historyData = []; 
             processingQueue.length = 0;
             ttsQueue.length = 0;
-            lastRecognizedText = "";
+            recentSentences.clear();
             outLang1.textContent="待機中..."; 
             outLang2.textContent="---"; 
             outLang3.textContent="---"; 
