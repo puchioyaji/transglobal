@@ -354,9 +354,11 @@
     let isTtsEnabled = true; 
     let historyData = [];
 
-    // 重複防止＆TTSフィードバック対策変数
+    // 重複防止＆話始め検出用コントロール変数
     const recentSentences = new Set();
     let lastSpeakingEndTime = 0;
+    let speechSilenceTimer = null;
+    let pendingInterimText = "";
 
     const btnStart = document.getElementById('btn-start');
     const btnTts = document.getElementById('btn-tts');
@@ -386,6 +388,7 @@
 
     function removeFillerWords(text) {
         if (!text) return "";
+        // 話始めに多いフィラーを取り除き、頭の言葉をクリアに認識させる
         const fillerRegex = /^(えー+|あー+|うー+ん*|あのー*|えー+と|えっと|んー+)[、,。.\s]*/g;
         let cleaned = text.replace(fillerRegex, "");
         cleaned = cleaned.replace(/[、,]\s*(えー+|あー+|うー+ん*|あのー*|えっと)\s*/g, "、");
@@ -398,18 +401,18 @@
 
         if (!cleaned || cleaned.length < 1) return;
 
-        // TTS発話中、または発話直後（2秒以内）は読み上げ声の誤拾いを防ぐ
-        if (isSpeaking || Date.now() - lastSpeakingEndTime < 2000) {
+        // TTS動作中、および発話終了直後（800ms以内）は誤拾い防止のため弾く
+        if (isSpeaking || Date.now() - lastSpeakingEndTime < 800) {
             return;
         }
 
-        // 直近4秒間に処理された同一フレーズは破棄
+        // 直近3秒以内に同じフレーズが入っていた場合は重複除外
         if (recentSentences.has(cleaned)) return;
 
         recentSentences.add(cleaned);
         setTimeout(() => {
             recentSentences.delete(cleaned);
-        }, 4000);
+        }, 3000);
 
         processingQueue.push(cleaned);
         triggerProcessingEngine();
@@ -529,37 +532,63 @@
     }
 
     // =========================================================================
-    // 【音声認識エンジン】
+    // 【話始めチューニング済】音声認識エンジン
     // =========================================================================
     function initSpeechRecognitionEngine() {
         if (!SpeechRecognition) return null;
         
         const rec = new SpeechRecognition();
         rec.continuous = true;        
-        rec.interimResults = true;
+        rec.interimResults = true; // リアルタイム認識有効
         rec.lang = 'ja-JP';
 
         rec.onresult = (event) => {
-            // 発話中および直後は音声入力を受け取らない
-            if (isSpeaking || Date.now() - lastSpeakingEndTime < 2000) return;
+            if (isSpeaking || Date.now() - lastSpeakingEndTime < 800) return;
 
             let interimTranscript = '';
+            let finalTranscript = '';
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    enqueueRecognizedText(transcript.trim());
+                    finalTranscript += transcript;
                 } else {
                     interimTranscript += transcript;
                 }
             }
 
-            if (interimTranscript) {
-                statusText.textContent = `認識中... ${interimTranscript}`;
+            // 1. 確定した音声（isFinal）があれば即座に送信
+            if (finalTranscript.trim()) {
+                if (speechSilenceTimer) clearTimeout(speechSilenceTimer);
+                pendingInterimText = "";
+                enqueueRecognizedText(finalTranscript.trim());
+            } 
+            // 2. 確定前（話始めなど）の文字列がある場合のレスポンス向上処理
+            else if (interimTranscript.trim()) {
+                pendingInterimText = interimTranscript.trim();
+                statusText.textContent = `認識中... ${pendingInterimText}`;
+
+                // 話頭が「確定」判定になる前に途切れる現象の防止
+                // ポーズ（無音）が750ミリ秒続いたら確定前テキストでも処理に送る
+                if (speechSilenceTimer) clearTimeout(speechSilenceTimer);
+                speechSilenceTimer = setTimeout(() => {
+                    if (pendingInterimText.length > 0) {
+                        enqueueRecognizedText(pendingInterimText);
+                        pendingInterimText = "";
+                    }
+                }, 750);
             }
         };
 
         rec.onend = () => {
+            // 切断時、送信待ちの途中テキストがあれば回収
+            if (pendingInterimText) {
+                enqueueRecognizedText(pendingInterimText);
+                pendingInterimText = "";
+            }
+            if (speechSilenceTimer) clearTimeout(speechSilenceTimer);
+
+            // 切断されたら無音判定待ちなしで即時再スタート
             if (isRecording) {
                 try { recognition.start(); } catch(e){}
             }
