@@ -213,7 +213,7 @@
         window.speechSynthesis.speak(u);
     }
 
-    btnJoin.addEventListener('click', () => {
+    btnJoin.addEventListener('click', async () => {
         unlockAudio();
 
         const companyInput = inputCompany.value.trim();
@@ -231,6 +231,16 @@
         if (!nameInput) {
             alert("名前を入力してください。");
             return;
+        }
+
+        // マイク権限の事前取得 (HTTPS必須)
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+            }
+        } catch (e) {
+            console.warn("マイク権限の取得に失敗しました。HTTPSで接続されているか確認してください:", e);
         }
 
         companyCode = companyInput;
@@ -484,7 +494,7 @@
 
     function initSpeechRecognition() {
         if (!SpeechRecognition) {
-            alert("お使いのブラウザは音声認識に対応していません。Chromeをご利用ください。");
+            alert("お使いのブラウザは音声認識に対応していません。PC版Chromeをご利用ください。");
             return null;
         }
 
@@ -518,9 +528,26 @@
             }
         };
 
+        rec.onerror = (event) => {
+            console.error("Speech Recognition Error:", event.error);
+            if (event.error === 'not-allowed') {
+                alert("マイクの使用許可が拒否されています。ブラウザのアドレスバーのアイコンから設定をご確認ください。");
+                isRecording = false;
+                btnMic.textContent = "マイク開始";
+                btnMic.classList.remove('recording');
+                statusText.textContent = "マイク停止中";
+            }
+        };
+
         rec.onend = () => {
             if (isRecording && !isSpeakingTTS) {
-                try { recognition.start(); } catch(e){}
+                setTimeout(() => {
+                    try { 
+                        if (isRecording) rec.start(); 
+                    } catch(e) {
+                        console.warn("Re-start prevented:", e);
+                    }
+                }, 300);
             }
         };
 
@@ -535,9 +562,13 @@
             isRecording = true;
             if (!recognition) recognition = initSpeechRecognition();
             try {
-                recognition.lang = userLangCode;
-                recognition.start();
-            } catch(e){}
+                if (recognition) {
+                    recognition.lang = userLangCode;
+                    recognition.start();
+                }
+            } catch(e){
+                console.error("Mic start error:", e);
+            }
             btnMic.textContent = "マイク停止";
             btnMic.classList.add('recording');
             statusText.textContent = "聴取を開始しました...";
