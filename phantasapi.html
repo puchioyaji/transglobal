@@ -2,659 +2,186 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gausium Phantas コントロールパネル (直接接続版)</title>
-  
+  <title>Gausium Phantas コントロールパネル (Web直結版)</title>
   <style>
-    :root {
-      --bg-color: #f4f6f9;
-      --card-bg: #ffffff;
-      --text-main: #2c3e50;
-      --text-sub: #7f8c8d;
-      --primary: #2563eb;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --border: #e2e8f0;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-main);
-      padding: 24px;
-      line-height: 1.5;
+      font-family: sans-serif;
+      margin: 20px;
+      background-color: #f4f7f6;
+      color: #333;
     }
-
-    .container {
-      max-width: 1100px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 20px;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--card-bg);
-      padding: 20px 24px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-    }
-
-    h1 { font-size: 1.25rem; font-weight: 700; }
-    
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-    .status-online { background: #d1fae5; color: #065f46; }
-    .status-working { background: #dbeafe; color: #1e40af; }
-    .status-charging { background: #fef3c7; color: #92400e; }
-    .status-offline { background: #fee2e2; color: #991b1b; }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 20px;
-    }
-
     .card {
-      background: var(--card-bg);
-      border-radius: 12px;
+      background: white;
       padding: 20px;
-      border: 1px solid var(--border);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .card-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text-sub);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    .map-wrapper {
-      position: relative;
-      width: 100%;
-      background: #0f172a;
       border-radius: 8px;
-      overflow: hidden;
-      display: flex;
-      justify-content: center;
-      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
     }
-
-    canvas {
+    .form-group {
+      margin-bottom: 12px;
+    }
+    label {
       display: block;
-      background: #1e293b;
-      max-width: 100%;
-      height: auto;
-    }
-
-    .map-legend {
-      display: flex;
-      gap: 16px;
-      font-size: 0.8rem;
-      color: var(--text-sub);
-      margin-top: 12px;
-      flex-wrap: wrap;
-    }
-    .legend-item { display: flex; align-items: center; gap: 6px; }
-    .legend-color { width: 12px; height: 12px; border-radius: 3px; }
-
-    .form-group { margin-bottom: 12px; }
-    .form-group label {
-      display: block;
-      font-size: 0.85rem;
+      font-weight: bold;
       margin-bottom: 4px;
-      color: var(--text-sub);
     }
-    .form-group input, .form-group select {
+    input[type="text"], input[type="password"] {
       width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      font-size: 0.9rem;
-    }
-
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-    }
-    .metric-box {
-      background: #f8fafc;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid #edf2f7;
-    }
-    .metric-label { font-size: 0.75rem; color: var(--text-sub); }
-    .metric-value { font-size: 1.25rem; font-weight: 700; margin-top: 4px; }
-
-    .progress-bar-bg {
-      background: #e2e8f0;
-      height: 6px;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
       border-radius: 4px;
-      overflow: hidden;
-      margin-top: 6px;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      background: var(--primary);
-      width: 0%;
-      transition: width 0.3s ease;
-    }
-
-    .control-btns {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
     }
     button {
-      padding: 12px 16px;
+      background-color: #007bff;
+      color: white;
       border: none;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 4px;
       cursor: pointer;
-      transition: opacity 0.2s;
+      font-weight: bold;
     }
-    button:hover { opacity: 0.9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-warning { background: var(--warning); color: white; }
-    .btn-danger { background: var(--danger); color: white; }
-    .btn-secondary { background: #64748b; color: white; }
-
-    .log-container {
-      background: #0f172a;
-      color: #38bdf8;
+    button:hover {
+      background-color: #0056b3;
+    }
+    #logArea {
+      width: 100%;
+      height: 300px;
+      background-color: #1e1e1e;
+      color: #00ff66;
       font-family: monospace;
-      font-size: 0.85rem;
-      padding: 12px;
-      border-radius: 8px;
-      height: 160px;
-      overflow-y: auto;
+      padding: 10px;
+      border-radius: 4px;
+      box-sizing: border-box;
+      overflow-y: scroll;
       white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
 
-<div class="container">
-  <!-- ヘッダー -->
-  <header>
-    <div>
-      <h1>Phantas 清掃ロボット コントロールパネル</h1>
-      <p style="font-size:0.85rem; color: var(--text-sub);">接続ロボット: <span id="display-robot-id">未接続</span></p>
-    </div>
-    <div id="status-badge" class="status-badge status-offline">● 未接続</div>
-  </header>
+  <h1>🤖 Gausium Phantas コントロールパネル (Web版)</h1>
 
-  <!-- マップ表示 -->
   <div class="card">
-    <div class="card-header">
-      <div class="card-title">PHANTAS リアルタイムマップ (SLAM / 2D Grid)</div>
-      <div style="font-size: 0.85rem; color: var(--text-sub);">マップ名: <strong id="map-name-display" style="color:var(--text-main);">--</strong></div>
+    <h3>🔑 認証情報の入力</h3>
+    <div class="form-group">
+      <label for="appId">Application ID (client_id):</label>
+      <input type="text" id="appId" placeholder="Application ID を入力">
     </div>
-    <div class="map-wrapper">
-      <canvas id="slamCanvas" width="800" height="400"></canvas>
+    <div class="form-group">
+      <label for="appSecret">App Secret (client_secret):</label>
+      <input type="password" id="appSecret" placeholder="App Secret を入力">
     </div>
-    <div class="map-legend">
-      <div class="legend-item"><div class="legend-color" style="background:#000000; border:1px solid #666;"></div> 障害物 / 壁</div>
-      <div class="legend-item"><div class="legend-color" style="background:#334155;"></div> 移動可能領域</div>
-      <div class="legend-item"><div class="legend-color" style="background:rgba(37, 99, 235, 0.4);"></div> 清掃済み領域</div>
-      <div class="legend-item"><div class="legend-color" style="background:#10b981;"></div> 充電ドック (Home)</div>
-      <div class="legend-item"><div class="legend-color" style="background:#ef4444;"></div> Phantas (現在位置)</div>
+    <div class="form-group">
+      <label for="accessKey">Open Access Key (open_access_key):</label>
+      <input type="password" id="accessKey" placeholder="Open Access Key を入力">
     </div>
+    <button onclick="executeApiCall()">認証 & ロボット検索</button>
   </div>
 
-  <div class="grid-2">
-    <!-- API設定エリア -->
-    <div class="card">
-      <div class="card-title">Gausium Cloud API 接続設定</div>
-      <div class="form-group">
-        <label>動作モード</label>
-        <select id="mode-select" onchange="toggleMode()">
-          <option value="live">本番（Gausium Cloud API直接接続）</option>
-          <option value="demo">デモ（シミュレーション走行）</option>
-        </select>
-      </div>
-      <div id="api-credentials-group">
-        <div class="form-group">
-          <label>API エンドポイント</label>
-          <input type="text" id="api-base-url" value="https://openapi.gs-robot.com" readonly style="background:#f1f5f9;">
-        </div>
-        <div class="form-group">
-          <label>Application ID (Client ID)</label>
-          <input type="text" id="client-id" placeholder="Application IDを入力">
-        </div>
-        <div class="form-group">
-          <label>App Secret (Client Secret)</label>
-          <input type="password" id="client-secret" placeholder="App Secretを入力">
-        </div>
-        <div class="form-group">
-          <label>AccessKeySecret (Open Access Key)</label>
-          <input type="password" id="open-access-key" placeholder="AccessKeySecretを入力">
-        </div>
-        <button class="btn-primary" style="width: 100%; margin-top: 8px;" onclick="authenticateAndInit()">認証 & ロボット検索</button>
-      </div>
-      
-      <div class="form-group" style="margin-top: 16px;">
-        <label>対象ロボット (Robot ID / Serial)</label>
-        <select id="robot-select" onchange="onRobotSelected()">
-          <option value="">-- ロボットを選択してください --</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- 状態データ表示 -->
-    <div class="card">
-      <div class="card-title">リアルタイムステータス</div>
-      <div class="metrics-grid">
-        <div class="metric-box">
-          <div class="metric-label">現在座標 (X, Y) / 角度</div>
-          <div class="metric-value" id="val-pose" style="font-size:1rem;">X: 0.0m, Y: 0.0m (0°)</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">清掃済み面積</div>
-          <div class="metric-value" id="val-area">0.0 ㎡</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">バッテリー残量</div>
-          <div class="metric-value" id="val-battery">--%</div>
-          <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-battery"></div></div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">浄水タンク残量</div>
-          <div class="metric-value" id="val-water">--%</div>
-          <div class="progress-bar-bg"><div class="progress-bar-fill" id="bar-water" style="background:#0284c7;"></div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 操作コマンド -->
   <div class="card">
-    <div class="card-title">ロボット制御コマンド</div>
-    <div class="control-btns">
-      <button class="btn-primary" onclick="sendCommand('START')">▶ 清掃タスク開始</button>
-      <button class="btn-warning" onclick="sendCommand('PAUSE')">⏸ 一時停止</button>
-      <button class="btn-secondary" onclick="sendCommand('DOCK')">🏠 充電ドックへ復帰</button>
-      <button class="btn-danger" onclick="sendCommand('STOP')">⏹ 緊急停止</button>
-    </div>
+    <h3>📜 実行ログ</h3>
+    <div id="logArea">システム初期化完了。Credentialsを入力して認証を実行してください。</div>
   </div>
 
-  <!-- ログ -->
-  <div class="card">
-    <div class="card-title">API リクエスト / イベントログ</div>
-    <div class="log-container" id="log-output">システム初期化完了。Credentialsを入力して認証を実行してください。</div>
-  </div>
-</div>
+  <script>
+    // CORS回避用プロキシの接頭辞
+    const PROXY_URL = "https://corsproxy.io/?";
 
-<script>
-  let state = {
-    mode: 'live',
-    accessToken: null,
-    selectedRobotId: null,
-    status: 'OFFLINE',
-    battery: 0,
-    water: 0,
-    action: '未接続',
-    pose: { x: 3.0, y: 3.0, angle: 0 },
-    cleanedArea: 0.0,
-    mapName: '--',
-    isCleaning: false
-  };
-
-  const demoPath = [
-    { x: 3.0, y: 3.0, angle: 0 }, { x: 12.0, y: 3.0, angle: 90 },
-    { x: 12.0, y: 6.0, angle: 180 }, { x: 3.0, y: 6.0, angle: 90 },
-    { x: 3.0, y: 9.0, angle: 0 }, { x: 12.0, y: 9.0, angle: 270 }
-  ];
-  let demoPathIndex = 0;
-  let cleanedPathHistory = [];
-  let canvas, ctx, pollingTimer = null;
-
-  window.onload = () => {
-    canvas = document.getElementById('slamCanvas');
-    ctx = canvas.getContext('2d');
-    drawSlamMap();
-  };
-
-  function toggleMode() {
-    state.mode = document.getElementById('mode-select').value;
-    const credGroup = document.getElementById('api-credentials-group');
-    
-    if (state.mode === 'demo') {
-      credGroup.style.display = 'none';
-      state.selectedRobotId = 'Phantas-DEMO-01';
-      document.getElementById('display-robot-id').innerText = state.selectedRobotId;
-      log("【デモモード】に切り替えました。");
-      startPolling();
-    } else {
-      credGroup.style.display = 'block';
-      if (pollingTimer) clearInterval(pollingTimer);
-      log("【本番モード】に切り替えました。認証を実行してください。");
-    }
-  }
-
-  // --- 1. OAuth 2.0 アクセストークンを取得 ---
-  async function authenticateAndInit() {
-    const baseUrl = "https://openapi.gs-robot.com";
-    const clientId = document.getElementById('client-id').value.trim();
-    const clientSecret = document.getElementById('client-secret').value.trim();
-    const accessKeySecret = document.getElementById('open-access-key').value.trim();
-
-    if (!clientId || !clientSecret || !accessKeySecret) {
-      alert("すべての認証情報キーを入力してください。");
-      return;
+    function log(message) {
+      const logArea = document.getElementById('logArea');
+      const time = new Date().toLocaleTimeString();
+      logArea.innerHTML = `[${time}] ${message}\n` + logArea.innerHTML;
     }
 
-    log("[API] Gausium Cloud API へ OAuth リクエスト送信中...");
+    async function executeApiCall() {
+      const appId = document.getElementById('appId').value.trim();
+      const appSecret = document.getElementById('appSecret').value.trim();
+      const accessKey = document.getElementById('accessKey').value.trim();
 
-    try {
-      const response = await fetch(`${baseUrl}/gas/api/v1alpha1/oauth/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          grant_type: "urn:gaussian:params:oauth:grant-type:open-access-token",
-          client_id: clientId,
-          client_secret: clientSecret,
-          open_access_key: accessKeySecret  // AccessKeySecretを渡す
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data.access_token) {
-        throw new Error(data.error_description || data.message || "認証エラー");
+      if (!appId || !appSecret || !accessKey) {
+        alert("すべての認証情報を入力してください。");
+        return;
       }
 
-      state.accessToken = data.access_token.replace(/\r?\n/g, "").trim();
-      log("[API] 認証成功！ アクセストークンを取得しました。");
-
-      await fetchRobotList();
-
-    } catch (err) {
-      log(`[ERROR] 認証失敗: ${err.message}`);
-      console.error("認証エラー詳細:", err);
-      alert(`認証に失敗しました: ${err.message}`);
-    }
-  }
-
-  // --- 2. 機器一覧の取得 ---
-  async function fetchRobotList() {
-    const baseUrl = "https://openapi.gs-robot.com";
-    log("[API] 登録ロボット一覧を取得中 (`/v1alpha1/robots?page=1&page_size=10`)...");
-
-    try {
-      const response = await fetch(`${baseUrl}/v1alpha1/robots?page=1&page_size=10`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${state.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errText}`);
-      }
-
-      const data = await response.json();
-      const robotSelect = document.getElementById('robot-select');
-      robotSelect.innerHTML = '';
-
-      if (data.robots && data.robots.length > 0) {
-        data.robots.forEach((robot) => {
-          const opt = document.createElement('option');
-          opt.value = robot.id || robot.serial_number;
-          opt.innerText = `${robot.name || 'Phantas'} (${opt.value})`;
-          robotSelect.appendChild(opt);
-        });
-        
-        onRobotSelected();
-        log(`[API] 成功: ${data.robots.length} 台のロボットを発見しました。`);
-        startPolling();
-      } else {
-        const opt = document.createElement('option');
-        opt.value = "";
-        opt.innerText = "ロボットが見つかりません (0件)";
-        robotSelect.appendChild(opt);
-        log("[SUCCESS] 通信成功！ (権限に紐づくロボット数: 0件)");
-      }
-
-    } catch (err) {
-      log(`[ERROR] ロボット一覧取得失敗: ${err.message}`);
-      console.error("エラー詳細:", err);
-    }
-  }
-
-  function onRobotSelected() {
-    const select = document.getElementById('robot-select');
-    state.selectedRobotId = select.value;
-    document.getElementById('display-robot-id').innerText = state.selectedRobotId || '未選択';
-  }
-
-  // --- 3. ポーリング ---
-  function startPolling() {
-    if (pollingTimer) clearInterval(pollingTimer);
-    pollingTimer = setInterval(() => {
-      fetchStatus();
-    }, 2500);
-  }
-
-  async function fetchStatus() {
-    if (!state.selectedRobotId && state.mode === 'live') return;
-
-    if (state.mode === 'live') {
-      const baseUrl = "https://openapi.gs-robot.com";
+      const BASE_URL = "https://openapi.gs-robot.com";
 
       try {
-        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/status`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${state.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        log("[API] プロキシ経由で OAuth リクエスト送信中...");
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.pose) {
-            state.pose = data.pose;
-            cleanedPathHistory.push({ x: state.pose.x, y: state.pose.y });
-          }
-          if (data.map_name) state.mapName = data.map_name;
-          updateUI(data);
-        }
-      } catch (err) {
-        console.error("ステータス取得エラー:", err);
-      }
-    } else {
-      if (state.isCleaning) {
-        const target = demoPath[demoPathIndex];
-        const dx = target.x - state.pose.x;
-        const dy = target.y - state.pose.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < 0.2) {
-          demoPathIndex = (demoPathIndex + 1) % demoPath.length;
-        } else {
-          state.pose.x += (dx / dist) * 0.3;
-          state.pose.y += (dy / dist) * 0.3;
-          state.pose.angle = Math.atan2(dy, dx) * (180 / Math.PI);
-        }
-
-        cleanedPathHistory.push({ x: state.pose.x, y: state.pose.y });
-        state.cleanedArea += 0.3;
-        state.battery = Math.max(0, state.battery - 0.05);
-        state.water = Math.max(0, state.water - 0.08);
-      }
-      updateUI({
-        battery: state.battery,
-        water: state.water,
-        status: state.isCleaning ? 'WORKING' : 'ONLINE',
-        action: state.isCleaning ? '清掃走行中' : '待機中'
-      });
-    }
-
-    drawSlamMap();
-  }
-
-  // --- 4. 指示コマンド ---
-  async function sendCommand(action) {
-    if (!state.selectedRobotId) {
-      alert("対象のロボットが選択されていません。");
-      return;
-    }
-
-    log(`[SEND] コマンド送信: ${action} -> ${state.selectedRobotId}`);
-
-    if (state.mode === 'live') {
-      const baseUrl = "https://openapi.gs-robot.com";
-
-      try {
-        const response = await fetch(`${baseUrl}/v1alpha1/robots/${state.selectedRobotId}/commands`, {
+        // 1. OAuth トークン取得 (URLの先頭に PROXY_URL + encodeURIComponent を付与)
+        const tokenTargetUrl = `${BASE_URL}/gas/api/v1alpha1/oauth/token`;
+        const tokenRes = await fetch(PROXY_URL + encodeURIComponent(tokenTargetUrl), {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${state.accessToken}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ command: action })
+          body: JSON.stringify({
+            grant_type: "urn:gaussian:params:oauth:grant-type:open-access-token",
+            client_id: appId,
+            client_secret: appSecret,
+            open_access_key: accessKey
+          })
         });
 
-        const resData = await response.json();
-        log(`[RECV] 応答: ${JSON.stringify(resData)}`);
+        if (!tokenRes.ok) {
+          const errText = await tokenRes.text();
+          log(`[ERROR] トークン取得失敗 (HTTP ${tokenRes.status}): ${errText}`);
+          return;
+        }
+
+        const tokenData = await tokenRes.json();
+        console.log("【1. トークンレスポンス】", tokenData);
+
+        const accessToken = tokenData.access_token || (tokenData.data && tokenData.data.access_token);
+
+        if (!accessToken) {
+          log(`[ERROR] トークンが取得できませんでした: ${JSON.stringify(tokenData)}`);
+          return;
+        }
+
+        log("[API] 認証成功！ アクセストークンを取得しました。");
+        log("[API] メーカー指定パラメータ (relation=contract) 付与で機器一覧を取得中...");
+
+        // 2. ロボット一覧の取得 (relation=contract パラメータを追加)
+        const robotsTargetUrl = `${BASE_URL}/v1alpha1/robots?page=1&pageSize=50&relation=contract`;
+        const robotsRes = await fetch(PROXY_URL + encodeURIComponent(robotsTargetUrl), {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!robotsRes.ok) {
+          const errText = await robotsRes.text();
+          log(`[ERROR] ロボット一覧取得失敗 (HTTP ${robotsRes.status}): ${errText}`);
+          return;
+        }
+
+        const robotsData = await robotsRes.json();
+        console.log("【2. ロボット一覧レスポンス】", robotsData);
+
+        // レスポンスからロボット配列を判定取得
+        const robotList = robotsData.robots || (robotsData.data && robotsData.data.robots) || [];
+
+        log(`[SUCCESS] 通信成功！ (検出されたロボット数: ${robotList.length} 件)`);
+
+        if (robotList.length === 0) {
+          log("[INFO] ロボットが0件です。DevTools (F12) Console のログをご確認ください。");
+        } else {
+          robotList.forEach((robot, idx) => {
+            const sn = robot.serialNumber || robot.sn || robot.robot_sn;
+            const name = robot.displayName || robot.name || '名称未設定';
+            log(`  └ ロボット[${idx + 1}]: SN=${sn}, 名前=${name}, オンラインステータス=${robot.online}`);
+          });
+        }
+
       } catch (err) {
-        log(`[ERROR] コマンド送信失敗: ${err.message}`);
-      }
-    } else {
-      switch (action) {
-        case 'START': state.isCleaning = true; state.action = '清掃走行中'; break;
-        case 'PAUSE':
-        case 'STOP': state.isCleaning = false; state.action = '停止中'; break;
-        case 'DOCK': state.isCleaning = false; state.action = 'ドック帰還中'; state.pose = { x: 3.0, y: 3.0, angle: 0 }; break;
-      }
-      log(`[SIM] 状態更新: ${state.action}`);
-    }
-  }
-
-  // --- 5. UI & 描画 ---
-  function updateUI(data) {
-    document.getElementById('map-name-display').innerText = state.mapName || '1F_メインエリア';
-    document.getElementById('val-pose').innerText = 
-      `X: ${state.pose.x.toFixed(1)}m, Y: ${state.pose.y.toFixed(1)}m (${Math.round(state.pose.angle)}°)`;
-    document.getElementById('val-area').innerText = `${state.cleanedArea.toFixed(1)} ㎡`;
-
-    const battery = Math.round(data.battery || 0);
-    document.getElementById('val-battery').innerText = `${battery}%`;
-    document.getElementById('bar-battery').style.width = `${battery}%`;
-
-    const water = Math.round(data.water || 0);
-    document.getElementById('val-water').innerText = `${water}%`;
-    document.getElementById('bar-water').style.width = `${water}%`;
-
-    if (data.status === 'WORKING') {
-      updateStatusBadge('status-working', '● 清掃実行中');
-    } else if (data.status === 'CHARGING') {
-      updateStatusBadge('status-charging', '⚡ 充電中');
-    } else if (data.status === 'ONLINE') {
-      updateStatusBadge('status-online', '● オンライン');
-    } else {
-      updateStatusBadge('status-offline', '● オフライン');
-    }
-  }
-
-  function updateStatusBadge(className, text) {
-    const badge = document.getElementById('status-badge');
-    badge.className = `status-badge ${className}`;
-    badge.innerText = text;
-  }
-
-  function drawSlamMap() {
-    const w = canvas.width;
-    const h = canvas.height;
-    const scale = 25;
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(50, 50, w - 100, h - 100);
-
-    ctx.fillStyle = '#000000';
-    ctx.strokeStyle = '#475569';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(50, 50, w - 100, h - 100);
-    ctx.fillRect(180, 120, 120, 30);
-    ctx.fillRect(450, 120, 150, 30);
-
-    if (cleanedPathHistory.length > 1) {
-      ctx.fillStyle = 'rgba(37, 99, 235, 0.35)';
-      for (let p of cleanedPathHistory) {
-        let px = 50 + p.x * scale;
-        let py = 50 + p.y * scale;
-        ctx.beginPath();
-        ctx.arc(px, py, 18, 0, Math.PI * 2);
-        ctx.fill();
+        console.error("通信エラー詳細:", err);
+        log(`[ERROR] 通信エラーが発生しました: ${err.message}`);
       }
     }
-
-    const dockX = 50 + 3.0 * scale;
-    const dockY = 50 + 3.0 * scale;
-    ctx.fillStyle = '#10b981';
-    ctx.fillRect(dockX - 12, dockY - 12, 24, 24);
-
-    const rx = 50 + state.pose.x * scale;
-    const ry = 50 + state.pose.y * scale;
-
-    ctx.save();
-    ctx.translate(rx, ry);
-    ctx.rotate((state.pose.angle * Math.PI) / 180);
-
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(10, 0);
-    ctx.lineTo(-5, -6);
-    ctx.lineTo(-5, 6);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  function log(msg) {
-    const logBox = document.getElementById('log-output');
-    const time = new Date().toLocaleTimeString();
-    logBox.innerText = `[${time}] ${msg}\n` + logBox.innerText;
-  }
-</script>
-
+  </script>
 </body>
 </html>
