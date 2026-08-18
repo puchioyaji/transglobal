@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Gausium Phantas コントロールパネル (Web直結版)</title>
+  <title>Gausium Phantas コントロールパネル (Webプロキシ版)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -85,8 +85,8 @@
   </div>
 
   <script>
-    // CORS回避用プロキシの接頭辞
-    const PROXY_URL = "https://corsproxy.io/?";
+    // 安定性の高いCORS回避プロキシURL（ThingProxy経由）
+    const PROXY_URL = "https://thingproxy.freeboard.io/fetch/";
 
     function log(message) {
       const logArea = document.getElementById('logArea');
@@ -109,9 +109,9 @@
       try {
         log("[API] プロキシ経由で OAuth リクエスト送信中...");
 
-        // 1. OAuth トークン取得 (URLの先頭に PROXY_URL + encodeURIComponent を付与)
+        // 1. OAuth トークン取得
         const tokenTargetUrl = `${BASE_URL}/gas/api/v1alpha1/oauth/token`;
-        const tokenRes = await fetch(PROXY_URL + encodeURIComponent(tokenTargetUrl), {
+        const tokenRes = await fetch(PROXY_URL + tokenTargetUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -141,11 +141,11 @@
         }
 
         log("[API] 認証成功！ アクセストークンを取得しました。");
-        log("[API] メーカー指定パラメータ (relation=contract) 付与で機器一覧を取得中...");
+        log("[API] 機器一覧 (relation=contract) を取得中...");
 
-        // 2. ロボット一覧の取得 (relation=contract パラメータを追加)
+        // 2. ロボット一覧の取得
         const robotsTargetUrl = `${BASE_URL}/v1alpha1/robots?page=1&pageSize=50&relation=contract`;
-        const robotsRes = await fetch(PROXY_URL + encodeURIComponent(robotsTargetUrl), {
+        const robotsRes = await fetch(PROXY_URL + robotsTargetUrl, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -162,7 +162,6 @@
         const robotsData = await robotsRes.json();
         console.log("【2. ロボット一覧レスポンス】", robotsData);
 
-        // レスポンスからロボット配列を判定取得
         const robotList = robotsData.robots || (robotsData.data && robotsData.data.robots) || [];
 
         log(`[SUCCESS] 通信成功！ (検出されたロボット数: ${robotList.length} 件)`);
@@ -173,7 +172,7 @@
           robotList.forEach((robot, idx) => {
             const sn = robot.serialNumber || robot.sn || robot.robot_sn;
             const name = robot.displayName || robot.name || '名称未設定';
-            log(`  └ ロボット[${idx + 1}]: SN=${sn}, 名前=${name}, オンラインステータス=${robot.online}`);
+            log(`  └ ロボット[${idx + 1}]: SN=${sn}, 名前=${name}`);
           });
         }
 
