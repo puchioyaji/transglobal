@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Gausium Phantas コントロールパネル (Webプロキシ版)</title>
+  <title>Gausium Phantas コントロールパネル (Web直通版)</title>
   <style>
     body {
       font-family: sans-serif;
@@ -60,7 +60,7 @@
 </head>
 <body>
 
-  <h1>🤖 Gausium Phantas コントロールパネル (Web版)</h1>
+  <h1>🤖 Gausium Phantas コントロールパネル (Web直通版)</h1>
 
   <div class="card">
     <h3>🔑 認証情報の入力</h3>
@@ -81,13 +81,10 @@
 
   <div class="card">
     <h3>📜 実行ログ</h3>
-    <div id="logArea">システム初期化完了。Credentialsを入力して認証を実行してください。</div>
+    <div id="logArea">システム初期化完了。「Allow CORS」を有効にして認証を実行してください。</div>
   </div>
 
   <script>
-    // 安定性の高いCORS回避プロキシURL（ThingProxy経由）
-    const PROXY_URL = "https://thingproxy.freeboard.io/fetch/";
-
     function log(message) {
       const logArea = document.getElementById('logArea');
       const time = new Date().toLocaleTimeString();
@@ -107,11 +104,10 @@
       const BASE_URL = "https://openapi.gs-robot.com";
 
       try {
-        log("[API] プロキシ経由で OAuth リクエスト送信中...");
+        log("[API] Gausium Cloud へ直通 OAuth リクエスト送信中...");
 
-        // 1. OAuth トークン取得
-        const tokenTargetUrl = `${BASE_URL}/gas/api/v1alpha1/oauth/token`;
-        const tokenRes = await fetch(PROXY_URL + tokenTargetUrl, {
+        // 1. OAuth トークン取得 (プロキシなし・直通)
+        const tokenRes = await fetch(`${BASE_URL}/gas/api/v1alpha1/oauth/token`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -143,9 +139,8 @@
         log("[API] 認証成功！ アクセストークンを取得しました。");
         log("[API] 機器一覧 (relation=contract) を取得中...");
 
-        // 2. ロボット一覧の取得
-        const robotsTargetUrl = `${BASE_URL}/v1alpha1/robots?page=1&pageSize=50&relation=contract`;
-        const robotsRes = await fetch(PROXY_URL + robotsTargetUrl, {
+        // 2. ロボット一覧の取得 (メーカー指定の relation=contract パラメータ付与)
+        const robotsRes = await fetch(`${BASE_URL}/v1alpha1/robots?page=1&pageSize=50&relation=contract`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -172,13 +167,14 @@
           robotList.forEach((robot, idx) => {
             const sn = robot.serialNumber || robot.sn || robot.robot_sn;
             const name = robot.displayName || robot.name || '名称未設定';
-            log(`  └ ロボット[${idx + 1}]: SN=${sn}, 名前=${name}`);
+            log(`  └ ロボット[${idx + 1}]: SN=${sn}, 名前=${name}, オンライン=${robot.online}`);
           });
         }
 
       } catch (err) {
         console.error("通信エラー詳細:", err);
         log(`[ERROR] 通信エラーが発生しました: ${err.message}`);
+        log(`[HINT] Chrome拡張機能「Allow CORS」がONになっているか確認してください。`);
       }
     }
   </script>
