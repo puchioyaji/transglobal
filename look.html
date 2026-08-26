@@ -6,35 +6,66 @@
   <title>防災GIS & 備蓄・避難者管理システム</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- QR Code ライブラリ -->
+  <!-- Leaflet CSS & JS (APIキー不要・完全無料の軽量地図ライブラリ) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- QRコード表示ライブラリ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- Google Maps API (★YOUR_GOOGLE_MAPS_API_KEYを置き換えてください) -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" async defer></script>
   <style>
-    #map { height: calc(100vh - 80px); width: 100%; }
+    #map { height: calc(100vh - 120px); width: 100%; z-index: 1; }
   </style>
 </head>
 <body class="bg-gray-100 font-sans h-screen flex flex-col">
 
   <!-- ヘッダー -->
-  <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
-    <h1 class="text-xl font-bold flex items-center gap-2">📍 防災GIS 避難所・備蓄管理</h1>
+  <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
+    <h1 class="text-xl font-bold flex items-center gap-2">📍 避難所GIS & 備蓄品・避難者統合管理システム</h1>
     <div class="flex gap-2">
-      <button onclick="switchTab('map')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">地図GIS</button>
-      <button onclick="switchTab('evacuee')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">避難者検索・管理</button>
-      <button onclick="switchTab('stock')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">備蓄品・アラート</button>
-      <button onclick="openRegisterModal()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-bold">＋ 簡易受付発行</button>
+      <button onclick="switchTab('map')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm font-medium">地図GIS</button>
+      <button onclick="switchTab('evacuee')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm font-medium">避難者検索・移転</button>
+      <button onclick="switchTab('stock')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm font-medium">備蓄品・アラート</button>
+      <button onclick="openRegisterModal()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-bold shadow">＋ 簡易受付・QR発行</button>
     </div>
   </header>
 
-  <!-- Web API URL設定バー (GASのWebアプリURL) -->
+  <!-- GAS API URL設定バー -->
   <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs flex items-center justify-between">
-    <span class="font-bold text-amber-800">GAS APIエンドポイント設定:</span>
-    <input type="text" id="gasApiUrl" class="w-2/3 p-1 border rounded text-xs" placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec" onchange="saveApiUrl()">
+    <div class="flex items-center gap-2 w-full max-w-4xl">
+      <span class="font-bold text-amber-800 shrink-0">GAS API URL:</span>
+      <input type="text" id="gasApiUrl" class="w-full p-1 border rounded text-xs" placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec" onchange="saveApiUrl()">
+      <button onclick="loadData()" class="px-2 py-1 bg-amber-600 text-white rounded text-xs shrink-0 hover:bg-amber-700">再読み込み</button>
+    </div>
+    <span id="syncStatus" class="text-gray-500 font-medium">未接続</span>
   </div>
 
-  <!-- コンテンツ領域 -->
-  <main class="flex-1 overflow-hidden relative">
+  <!-- スマホ用 家族・機微情報入力専用画面（URLパラメーターに id が指定されている場合に自動切り替え） -->
+  <div id="mobileUserForm" class="hidden p-4 max-w-lg mx-auto bg-white min-h-screen shadow-lg">
+    <h2 class="text-xl font-bold border-b pb-2 mb-4 text-blue-900">避難者 情報登録フォーム</h2>
+    <p class="text-xs text-gray-600 mb-4">世帯人数および配慮が必要な事項（持病・アレルギー・車椅子等）をご入力ください。</p>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-gray-700 mb-1">避難者ID (自動設定)</label>
+        <input type="text" id="mId" readonly class="w-full border p-2 rounded bg-gray-100 text-sm font-mono font-bold">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-700 mb-1">お名前</label>
+        <input type="text" id="mName" readonly class="w-full border p-2 rounded bg-gray-100 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-700 mb-1">同行世帯人数 (本人含む)</label>
+        <input type="number" id="mMembers" min="1" value="1" class="w-full border p-2 rounded text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-700 mb-1">要配慮事項・家族の状況等 (機微情報)</label>
+        <textarea id="mSpecialNeeds" rows="4" placeholder="例: アレルギー（卵・乳）、車椅子1台利用、粉ミルク必要、ペット同伴あり" class="w-full border p-2 rounded text-sm"></textarea>
+      </div>
+      <button onclick="submitMobileForm()" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700">登録を更新する</button>
+      <div id="mobileMsg" class="text-center text-sm font-bold mt-2"></div>
+    </div>
+  </div>
+
+  <!-- 管理者用 メイン画面 -->
+  <main id="adminMain" class="flex-1 overflow-hidden relative">
 
     <!-- 1. 地図GIS画面 -->
     <div id="tab-map" class="h-full w-full">
@@ -44,7 +75,8 @@
     <!-- 2. 避難者検索・移転管理画面 -->
     <div id="tab-evacuee" class="hidden p-6 overflow-y-auto h-full">
       <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center">
-        <input type="text" id="evacueeSearch" oninput="renderEvacuees()" placeholder="氏名・ID・電話番号で検索..." class="border p-2 rounded w-80 text-sm">
+        <input type="text" id="evacueeSearch" oninput="renderEvacuees()" placeholder="氏名・ID・電話番号で検索..." class="border p-2 rounded w-80 text-sm focus:outline-blue-500">
+        <div class="text-xs text-gray-500" id="evacueeCount"></div>
       </div>
       <div class="bg-white rounded-lg shadow overflow-hidden">
         <table class="w-full text-left text-sm">
@@ -52,10 +84,10 @@
             <tr>
               <th class="p-3">ID</th>
               <th class="p-3">氏名</th>
-              <th class="p-3">避難拠点</th>
+              <th class="p-3">滞在避難所</th>
               <th class="p-3">ステータス</th>
               <th class="p-3">世帯数</th>
-              <th class="p-3">要配慮・アレルギー情報</th>
+              <th class="p-3">要配慮・家族詳細（機微情報）</th>
               <th class="p-3">操作</th>
             </tr>
           </thead>
@@ -68,23 +100,24 @@
     <div id="tab-stock" class="hidden p-6 overflow-y-auto h-full">
       <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center">
         <div class="flex gap-2">
-          <button onclick="exportStockCSV()" class="border px-3 py-2 rounded text-sm hover:bg-gray-50">📥 CSVエクスポート</button>
-          <label class="border px-3 py-2 rounded text-sm hover:bg-gray-50 cursor-pointer">
-            📤 CSVインポート & 一括更新
+          <button onclick="exportStockCSV()" class="border px-3 py-2 rounded text-sm hover:bg-gray-50 font-medium">📥 CSVエクスポート</button>
+          <label class="border px-3 py-2 rounded text-sm hover:bg-gray-50 cursor-pointer font-medium">
+            📤 CSVインポート & 一括入替え
             <input type="file" accept=".csv" onchange="importStockCSV(event)" class="hidden">
           </label>
         </div>
-        <div class="text-xs text-gray-500">※推奨数量を割込むと自動発注アラートメールが送信されます</div>
+        <div class="text-xs text-red-600 font-bold">※確保推奨数未満の備蓄品は自動で管理者・発注宛にメール通知されます</div>
       </div>
       <div class="bg-white rounded-lg shadow overflow-hidden">
         <table class="w-full text-left text-sm">
           <thead class="bg-gray-100 border-b">
             <tr>
               <th class="p-3">品名</th>
-              <th class="p-3">保管場所</th>
+              <th class="p-3">詳細</th>
+              <th class="p-3">保管拠点・場所</th>
               <th class="p-3">現在数 / 推奨数</th>
               <th class="p-3">消費期限</th>
-              <th class="p-3">アラート</th>
+              <th class="p-3">アラート状況</th>
             </tr>
           </thead>
           <tbody id="stockTableBody" class="divide-y"></tbody>
@@ -95,133 +128,180 @@
   </main>
 
   <!-- モーダル: 簡易避難受付 & QR表示 -->
-  <div id="registerModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+  <div id="registerModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4" style="z-index: 9999;">
     <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
       <h2 class="text-lg font-bold border-b pb-2">避難者 簡易代理受付</h2>
       <div id="modalForm">
         <div class="space-y-3">
           <div>
-            <label class="block text-xs font-bold text-gray-700">受付避難所</label>
+            <label class="block text-xs font-bold text-gray-700 mb-1">受付避難所</label>
             <select id="regLocation" class="w-full border p-2 rounded text-sm"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-gray-700">代表者 氏名</label>
+            <label class="block text-xs font-bold text-gray-700 mb-1">代表者 氏名</label>
             <input type="text" id="regName" placeholder="例: 避難 太郎" class="w-full border p-2 rounded text-sm">
           </div>
           <div>
-            <label class="block text-xs font-bold text-gray-700">電話番号</label>
+            <label class="block text-xs font-bold text-gray-700 mb-1">電話番号</label>
             <input type="tel" id="regPhone" placeholder="09012345678" class="w-full border p-2 rounded text-sm">
           </div>
         </div>
         <div class="flex justify-end gap-2 mt-4">
           <button onclick="closeRegisterModal()" class="px-4 py-2 border rounded text-sm">キャンセル</button>
-          <button onclick="submitQuickRegister()" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">登録 & QR発行</button>
+          <button onclick="submitQuickRegister()" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold hover:bg-blue-700">登録 & QRコード発行</button>
         </div>
       </div>
+
       <div id="modalQR" class="hidden text-center space-y-3">
-        <p class="text-xs text-gray-600">登録完了。以下のQRをスマホで読み取り、家族・機微情報を入力してもらってください。</p>
+        <p class="text-xs text-gray-600">登録完了。以下のQRコードを避難者様のスマートフォンで読み取っていただき、家族数・機微情報をご入力してもらってください。</p>
         <div id="qrcode" class="flex justify-center py-2"></div>
-        <button onclick="closeRegisterModal()" class="w-full py-2 bg-gray-800 text-white rounded text-sm">閉じる</button>
+        <div id="qrUrlText" class="text-[10px] text-gray-400 break-all"></div>
+        <button onclick="closeRegisterModal()" class="w-full py-2 bg-gray-800 text-white rounded text-sm font-bold">完了・閉じる</button>
       </div>
     </div>
   </div>
 
   <script>
     let appData = { locations: [], stock: [], evacuees: [] };
-    let map;
-    let markers = [];
+    let map, markerGroup;
 
-    // LocalStorage 管理
     function getApiUrl() { return localStorage.getItem('gas_api_url') || ''; }
-    function saveApiUrl() { localStorage.setItem('gas_api_url', document.getElementById('gasApiUrl').value); loadData(); }
+    function saveApiUrl() { 
+      const url = document.getElementById('gasApiUrl').value.trim();
+      localStorage.setItem('gas_api_url', url); 
+      loadData(); 
+    }
 
-    document.getElementById('gasApiUrl').value = getApiUrl();
+    // アプリ初期化
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const evacueeId = urlParams.get('id');
 
-    // 1. データ読み込み
+      // スマホからのアクセス（QRコード読取）の場合
+      if (evacueeId) {
+        document.getElementById('adminMain').classList.add('hidden');
+        document.querySelector('header').classList.add('hidden');
+        document.querySelector('.bg-amber-50').classList.add('hidden');
+        document.getElementById('mobileUserForm').classList.remove('hidden');
+        loadMobileUserData(evacueeId);
+      } else {
+        document.getElementById('gasApiUrl').value = getApiUrl();
+        initMap();
+      }
+    };
+
+    // 1. 地図初期化 (Leaflet.js)
+    function initMap() {
+      map = L.map('map').setView([35.6812, 139.7671], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map);
+
+      markerGroup = L.layerGroup().addTo(map);
+      loadData();
+    }
+
+    // 2. データ全取得
     async function loadData() {
       const url = getApiUrl();
-      if (!url) return;
+      const statusEl = document.getElementById('syncStatus');
+      if (!url) {
+        statusEl.textContent = 'API URL未設定';
+        statusEl.className = 'text-red-500 font-bold';
+        return;
+      }
+
+      statusEl.textContent = '同期中...';
       try {
         const res = await fetch(`${url}?action=getInitialData`);
         appData = await res.json();
+        statusEl.textContent = '同期完了';
+        statusEl.className = 'text-green-600 font-bold';
+
         renderMapMarkers();
         renderEvacuees();
         renderStock();
         populateLocationSelect();
       } catch (err) {
-        console.error("API Error", err);
+        console.error("API Error:", err);
+        statusEl.textContent = '接続エラー';
+        statusEl.className = 'text-red-600 font-bold';
       }
     }
 
-    // 2. Google Maps 初期化
-    function initMap() {
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: { lat: 35.6812, lng: 139.7671 },
-        zoom: 13,
-      });
-      loadData();
-    }
-
+    // 地図ピン描画
     function renderMapMarkers() {
-      if (!map) return;
-      markers.forEach(m => m.setMap(null));
-      markers = [];
+      if (!map || !markerGroup) return;
+      markerGroup.clearLayers();
 
       appData.locations.forEach(loc => {
-        const marker = new google.maps.Marker({
-          position: { lat: Number(loc.lat), lng: Number(loc.lng) },
-          map: map,
-          title: loc.name,
-        });
+        const marker = L.marker([Number(loc.lat), Number(loc.lng)]).addTo(markerGroup);
+        const evacCount = appData.evacuees.filter(e => e.locationId === loc.id && e.status === '滞在中').length;
 
-        const infoWindow = new google.maps.InfoWindow({
-          content: `<div class="p-2">
-            <h3 class="font-bold">${loc.name}</h3>
-            <p class="text-xs text-gray-600">収容可能人数: ${loc.capacity}名</p>
-          </div>`
-        });
-
-        marker.addListener("click", () => infoWindow.open(map, marker));
-        markers.push(marker);
+        marker.bindPopup(`
+          <div class="p-2 min-w-[180px]">
+            <h3 class="font-bold border-b pb-1 mb-1 text-slate-800">${loc.name}</h3>
+            <p class="text-xs text-gray-600">収容定員: <b>${loc.capacity}</b> 名</p>
+            <p class="text-xs text-blue-600 font-bold">現在の避難者: <b>${evacCount}</b> 名</p>
+            <button onclick="switchTab('evacuee')" class="mt-2 w-full text-xs bg-blue-600 text-white py-1 rounded font-bold">避難者名簿を表示</button>
+          </div>
+        `);
       });
     }
 
-    // 3. 避難者描画 & 移転更新
+    // 避難者一覧描画
     function renderEvacuees() {
       const search = document.getElementById('evacueeSearch').value.toLowerCase();
       const tbody = document.getElementById('evacueeTableBody');
       tbody.innerHTML = '';
 
-      appData.evacuees.filter(e => e.name.toLowerCase().includes(search) || e.id.toLowerCase().includes(search)).forEach(e => {
+      const filtered = appData.evacuees.filter(e => 
+        (e.name && e.name.toLowerCase().includes(search)) || 
+        (e.id && e.id.toLowerCase().includes(search)) ||
+        (e.phone && e.phone.includes(search))
+      );
+
+      document.getElementById('evacueeCount').textContent = `該当: ${filtered.length} 名`;
+
+      filtered.forEach(e => {
         const locName = (appData.locations.find(l => l.id === e.locationId) || {}).name || e.locationId;
         tbody.innerHTML += `
           <tr class="hover:bg-gray-50">
             <td class="p-3 font-mono font-bold text-blue-600">${e.id}</td>
             <td class="p-3 font-bold">${e.name}</td>
             <td class="p-3">${locName}</td>
-            <td class="p-3"><span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">${e.status}</span></td>
-            <td class="p-3">${e.members}名</td>
-            <td class="p-3 text-xs bg-amber-50 text-amber-800">${e.specialNeeds}</td>
+            <td class="p-3"><span class="px-2 py-1 rounded text-xs ${e.status === '滞在中' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">${e.status}</span></td>
+            <td class="p-3 font-bold">${e.members} 名</td>
+            <td class="p-3 text-xs bg-amber-50 text-amber-900 border border-amber-200 rounded">${e.specialNeeds || 'なし'}</td>
             <td class="p-3">
-              <button onclick="updateStatus('${e.id}')" class="text-xs text-blue-600 hover:underline">移転・退所変更</button>
+              <button onclick="updateEvacueeStatusModal('${e.id}')" class="text-xs bg-slate-100 hover:bg-slate-200 border px-2 py-1 rounded text-slate-700">移転・退所</button>
             </td>
           </tr>
         `;
       });
     }
 
-    async function updateStatus(id) {
-      const newLoc = prompt("新しい避難所IDを入力してください (帰宅の場合はそのままOK):");
-      if (newLoc === null) return;
-      const status = newLoc ? "移転済" : "帰宅済";
+    // 避難者ステータス変更・移転処理
+    async function updateEvacueeStatusModal(id) {
+      const evac = appData.evacuees.find(e => e.id === id);
+      if (!evac) return;
+
+      const newStatus = prompt("新しいステータスを入力してください (例: 滞在中, 移転済, 帰宅済)", evac.status);
+      if (!newStatus) return;
+
+      let newLoc = evac.locationId;
+      if (newStatus === "移転済") {
+        newLoc = prompt("移転先の避難所IDを入力してください:", evac.locationId);
+      }
+
       await fetch(getApiUrl(), {
         method: 'POST',
-        body: JSON.stringify({ action: 'updateEvacueeStatus', id, locationId: newLoc, status })
+        body: JSON.stringify({ action: 'updateEvacueeStatus', id, locationId: newLoc, status: newStatus })
       });
       loadData();
     }
 
-    // 4. 備蓄品描画 & CSV
+    // 備蓄品一覧描画
     function renderStock() {
       const tbody = document.getElementById('stockTableBody');
       tbody.innerHTML = '';
@@ -230,27 +310,32 @@
       appData.stock.forEach(s => {
         const isLow = Number(s.qty) < Number(s.minQty);
         const expDate = new Date(s.expiry);
-        const isExpiring = (expDate - today) / (1000 * 3600 * 24) <= 30;
+        const diffDays = (expDate - today) / (1000 * 3600 * 24);
+        const isExpiring = diffDays <= 30 && diffDays >= 0;
+
+        const locName = (appData.locations.find(l => l.id === s.locationId) || {}).name || s.locationId;
 
         tbody.innerHTML += `
           <tr class="hover:bg-gray-50">
             <td class="p-3 font-bold">${s.name}</td>
-            <td class="p-3">${s.locationDetail}</td>
+            <td class="p-3 text-xs text-gray-600">${s.category || ''}</td>
+            <td class="p-3">${locName} <br><span class="text-xs text-gray-500">${s.locationDetail || ''}</span></td>
             <td class="p-3 ${isLow ? 'text-red-600 font-bold' : ''}">${s.qty} / ${s.minQty}</td>
             <td class="p-3">${s.expiry}</td>
             <td class="p-3">
-              ${isLow ? '<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded font-bold mr-1">在庫不足</span>' : ''}
-              ${isExpiring ? '<span class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded font-bold">期限切れ近</span>' : ''}
+              ${isLow ? '<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded font-bold mr-1">⚠️ 在庫不足 (自動発注対象)</span>' : ''}
+              ${isExpiring ? '<span class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded font-bold">⏳ 期限間近</span>' : ''}
             </td>
           </tr>
         `;
       });
     }
 
+    // CSV エクスポート
     function exportStockCSV() {
       let csv = "id,locationId,name,category,qty,minQty,locationDetail,expiry\n";
       appData.stock.forEach(s => {
-        csv += `${s.id},${s.locationId},${s.name},${s.category},${s.qty},${s.minQty},${s.locationDetail},${s.expiry}\n`;
+        csv += `${s.id},${s.locationId},${s.name},${s.category || ''},${s.qty},${s.minQty},${s.locationDetail || ''},${s.expiry}\n`;
       });
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
@@ -259,6 +344,7 @@
       link.click();
     }
 
+    // CSV インポート & 一括入替え
     function importStockCSV(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -267,20 +353,29 @@
         const lines = e.target.result.split("\n").slice(1);
         const items = lines.filter(l => l.trim()).map(line => {
           const [id, locationId, name, category, qty, minQty, locationDetail, expiry] = line.split(",");
-          return { id, locationId, name, category, qty, minQty, locationDetail, expiry: expiry ? expiry.trim() : '' };
+          return { 
+            id: id ? id.trim() : '', 
+            locationId: locationId ? locationId.trim() : '', 
+            name: name ? name.trim() : '', 
+            category: category ? category.trim() : '', 
+            qty: qty ? qty.trim() : 0, 
+            minQty: minQty ? minQty.trim() : 0, 
+            locationDetail: locationDetail ? locationDetail.trim() : '', 
+            expiry: expiry ? expiry.trim() : '' 
+          };
         });
 
         await fetch(getApiUrl(), {
           method: 'POST',
           body: JSON.stringify({ action: 'bulkUpdateStock', items })
         });
-        alert("備蓄品データが一括更新されました。");
+        alert("備蓄品データが正常に更新・置換されました。");
         loadData();
       };
       reader.readAsText(file);
     }
 
-    // Modal & QR Helper
+    // 簡易登録 & QR モーダル関係
     function openRegisterModal() { document.getElementById('registerModal').classList.remove('hidden'); }
     function closeRegisterModal() { 
       document.getElementById('registerModal').classList.add('hidden');
@@ -297,6 +392,11 @@
       const name = document.getElementById('regName').value;
       const phone = document.getElementById('regPhone').value;
 
+      if (!name || !phone) {
+        alert("氏名と電話番号を入力してください");
+        return;
+      }
+
       const res = await fetch(getApiUrl(), {
         method: 'POST',
         body: JSON.stringify({ action: 'quickRegisterEvacuee', locationId, name, phone })
@@ -308,13 +408,54 @@
         document.getElementById('modalQR').classList.remove('hidden');
         document.getElementById('qrcode').innerHTML = '';
         
-        // 本人入力用スマホURL
-        const userEditUrl = `${window.location.href.split('?')[0]}?id=${data.id}`;
-        new QRCode(document.getElementById("qrcode"), { text: userEditUrl, width: 128, height: 128 });
+        // スマホ用URLの生成
+        const userEditUrl = `${window.location.origin}${window.location.pathname}?id=${data.id}`;
+        document.getElementById('qrUrlText').textContent = userEditUrl;
+
+        new QRCode(document.getElementById("qrcode"), { text: userEditUrl, width: 140, height: 140 });
         loadData();
       }
     }
 
+    // スマホ専用入力画面のロード＆送信
+    async function loadMobileUserData(id) {
+      const url = getApiUrl();
+      if (!url) return;
+      const res = await fetch(`${url}?action=getEvacuee&id=${id}`);
+      const data = await res.json();
+      if (data && data.id) {
+        document.getElementById('mId').value = data.id;
+        document.getElementById('mName').value = data.name;
+        document.getElementById('mMembers').value = data.members || 1;
+        document.getElementById('mSpecialNeeds').value = data.specialNeeds || '';
+      }
+    }
+
+    async function submitMobileForm() {
+      const id = document.getElementById('mId').value;
+      const members = document.getElementById('mMembers').value;
+      const specialNeeds = document.getElementById('mSpecialNeeds').value;
+      const msgEl = document.getElementById('mobileMsg');
+
+      msgEl.textContent = "送信中...";
+      msgEl.className = "text-center text-sm font-bold text-gray-600 mt-2";
+
+      const res = await fetch(getApiUrl(), {
+        method: 'POST',
+        body: JSON.stringify({ action: 'updateEvacueeDetails', id, members, specialNeeds })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        msgEl.textContent = "登録情報が正常に更新されました！";
+        msgEl.className = "text-center text-sm font-bold text-green-600 mt-2";
+      } else {
+        msgEl.textContent = "送信エラーが発生しました。";
+        msgEl.className = "text-center text-sm font-bold text-red-600 mt-2";
+      }
+    }
+
+    // タブ切り替え
     function switchTab(tabName) {
       ['map', 'evacuee', 'stock'].forEach(t => {
         document.getElementById(`tab-${t}`).classList.add('hidden');
