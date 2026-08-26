@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>防災GIS & 備蓄・避難者管理システム</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- QR Code ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Google Maps API (★YOUR_GOOGLE_MAPS_API_KEYを置き換えてください) -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" async defer></script>
+  <style>
+    #map { height: calc(100vh - 80px); width: 100%; }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans h-screen flex flex-col">
+
+  <!-- ヘッダー -->
+  <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
+    <h1 class="text-xl font-bold flex items-center gap-2">📍 防災GIS 避難所・備蓄管理</h1>
+    <div class="flex gap-2">
+      <button onclick="switchTab('map')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">地図GIS</button>
+      <button onclick="switchTab('evacuee')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">避難者検索・管理</button>
+      <button onclick="switchTab('stock')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-sm">備蓄品・アラート</button>
+      <button onclick="openRegisterModal()" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-bold">＋ 簡易受付発行</button>
+    </div>
+  </header>
+
+  <!-- Web API URL設定バー (GASのWebアプリURL) -->
+  <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 text-xs flex items-center justify-between">
+    <span class="font-bold text-amber-800">GAS APIエンドポイント設定:</span>
+    <input type="text" id="gasApiUrl" class="w-2/3 p-1 border rounded text-xs" placeholder="https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec" onchange="saveApiUrl()">
+  </div>
+
+  <!-- コンテンツ領域 -->
+  <main class="flex-1 overflow-hidden relative">
+
+    <!-- 1. 地図GIS画面 -->
+    <div id="tab-map" class="h-full w-full">
+      <div id="map"></div>
+    </div>
+
+    <!-- 2. 避難者検索・移転管理画面 -->
+    <div id="tab-evacuee" class="hidden p-6 overflow-y-auto h-full">
+      <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center">
+        <input type="text" id="evacueeSearch" oninput="renderEvacuees()" placeholder="氏名・ID・電話番号で検索..." class="border p-2 rounded w-80 text-sm">
+      </div>
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-100 border-b">
+            <tr>
+              <th class="p-3">ID</th>
+              <th class="p-3">氏名</th>
+              <th class="p-3">避難拠点</th>
+              <th class="p-3">ステータス</th>
+              <th class="p-3">世帯数</th>
+              <th class="p-3">要配慮・アレルギー情報</th>
+              <th class="p-3">操作</th>
+            </tr>
+          </thead>
+          <tbody id="evacueeTableBody" class="divide-y"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. 備蓄品管理画面 -->
+    <div id="tab-stock" class="hidden p-6 overflow-y-auto h-full">
+      <div class="bg-white p-4 rounded-lg shadow mb-4 flex justify-between items-center">
+        <div class="flex gap-2">
+          <button onclick="exportStockCSV()" class="border px-3 py-2 rounded text-sm hover:bg-gray-50">📥 CSVエクスポート</button>
+          <label class="border px-3 py-2 rounded text-sm hover:bg-gray-50 cursor-pointer">
+            📤 CSVインポート & 一括更新
+            <input type="file" accept=".csv" onchange="importStockCSV(event)" class="hidden">
+          </label>
+        </div>
+        <div class="text-xs text-gray-500">※推奨数量を割込むと自動発注アラートメールが送信されます</div>
+      </div>
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-gray-100 border-b">
+            <tr>
+              <th class="p-3">品名</th>
+              <th class="p-3">保管場所</th>
+              <th class="p-3">現在数 / 推奨数</th>
+              <th class="p-3">消費期限</th>
+              <th class="p-3">アラート</th>
+            </tr>
+          </thead>
+          <tbody id="stockTableBody" class="divide-y"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- モーダル: 簡易避難受付 & QR表示 -->
+  <div id="registerModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
+      <h2 class="text-lg font-bold border-b pb-2">避難者 簡易代理受付</h2>
+      <div id="modalForm">
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-700">受付避難所</label>
+            <select id="regLocation" class="w-full border p-2 rounded text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-700">代表者 氏名</label>
+            <input type="text" id="regName" placeholder="例: 避難 太郎" class="w-full border p-2 rounded text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-700">電話番号</label>
+            <input type="tel" id="regPhone" placeholder="09012345678" class="w-full border p-2 rounded text-sm">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button onclick="closeRegisterModal()" class="px-4 py-2 border rounded text-sm">キャンセル</button>
+          <button onclick="submitQuickRegister()" class="px-4 py-2 bg-blue-600 text-white rounded text-sm font-bold">登録 & QR発行</button>
+        </div>
+      </div>
+      <div id="modalQR" class="hidden text-center space-y-3">
+        <p class="text-xs text-gray-600">登録完了。以下のQRをスマホで読み取り、家族・機微情報を入力してもらってください。</p>
+        <div id="qrcode" class="flex justify-center py-2"></div>
+        <button onclick="closeRegisterModal()" class="w-full py-2 bg-gray-800 text-white rounded text-sm">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let appData = { locations: [], stock: [], evacuees: [] };
+    let map;
+    let markers = [];
+
+    // LocalStorage 管理
+    function getApiUrl() { return localStorage.getItem('gas_api_url') || ''; }
+    function saveApiUrl() { localStorage.setItem('gas_api_url', document.getElementById('gasApiUrl').value); loadData(); }
+
+    document.getElementById('gasApiUrl').value = getApiUrl();
+
+    // 1. データ読み込み
+    async function loadData() {
+      const url = getApiUrl();
+      if (!url) return;
+      try {
+        const res = await fetch(`${url}?action=getInitialData`);
+        appData = await res.json();
+        renderMapMarkers();
+        renderEvacuees();
+        renderStock();
+        populateLocationSelect();
+      } catch (err) {
+        console.error("API Error", err);
+      }
+    }
+
+    // 2. Google Maps 初期化
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 35.6812, lng: 139.7671 },
+        zoom: 13,
+      });
+      loadData();
+    }
+
+    function renderMapMarkers() {
+      if (!map) return;
+      markers.forEach(m => m.setMap(null));
+      markers = [];
+
+      appData.locations.forEach(loc => {
+        const marker = new google.maps.Marker({
+          position: { lat: Number(loc.lat), lng: Number(loc.lng) },
+          map: map,
+          title: loc.name,
+        });
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div class="p-2">
+            <h3 class="font-bold">${loc.name}</h3>
+            <p class="text-xs text-gray-600">収容可能人数: ${loc.capacity}名</p>
+          </div>`
+        });
+
+        marker.addListener("click", () => infoWindow.open(map, marker));
+        markers.push(marker);
+      });
+    }
+
+    // 3. 避難者描画 & 移転更新
+    function renderEvacuees() {
+      const search = document.getElementById('evacueeSearch').value.toLowerCase();
+      const tbody = document.getElementById('evacueeTableBody');
+      tbody.innerHTML = '';
+
+      appData.evacuees.filter(e => e.name.toLowerCase().includes(search) || e.id.toLowerCase().includes(search)).forEach(e => {
+        const locName = (appData.locations.find(l => l.id === e.locationId) || {}).name || e.locationId;
+        tbody.innerHTML += `
+          <tr class="hover:bg-gray-50">
+            <td class="p-3 font-mono font-bold text-blue-600">${e.id}</td>
+            <td class="p-3 font-bold">${e.name}</td>
+            <td class="p-3">${locName}</td>
+            <td class="p-3"><span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">${e.status}</span></td>
+            <td class="p-3">${e.members}名</td>
+            <td class="p-3 text-xs bg-amber-50 text-amber-800">${e.specialNeeds}</td>
+            <td class="p-3">
+              <button onclick="updateStatus('${e.id}')" class="text-xs text-blue-600 hover:underline">移転・退所変更</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    async function updateStatus(id) {
+      const newLoc = prompt("新しい避難所IDを入力してください (帰宅の場合はそのままOK):");
+      if (newLoc === null) return;
+      const status = newLoc ? "移転済" : "帰宅済";
+      await fetch(getApiUrl(), {
+        method: 'POST',
+        body: JSON.stringify({ action: 'updateEvacueeStatus', id, locationId: newLoc, status })
+      });
+      loadData();
+    }
+
+    // 4. 備蓄品描画 & CSV
+    function renderStock() {
+      const tbody = document.getElementById('stockTableBody');
+      tbody.innerHTML = '';
+      const today = new Date();
+
+      appData.stock.forEach(s => {
+        const isLow = Number(s.qty) < Number(s.minQty);
+        const expDate = new Date(s.expiry);
+        const isExpiring = (expDate - today) / (1000 * 3600 * 24) <= 30;
+
+        tbody.innerHTML += `
+          <tr class="hover:bg-gray-50">
+            <td class="p-3 font-bold">${s.name}</td>
+            <td class="p-3">${s.locationDetail}</td>
+            <td class="p-3 ${isLow ? 'text-red-600 font-bold' : ''}">${s.qty} / ${s.minQty}</td>
+            <td class="p-3">${s.expiry}</td>
+            <td class="p-3">
+              ${isLow ? '<span class="bg-red-100 text-red-800 text-xs px-2 py-1 rounded font-bold mr-1">在庫不足</span>' : ''}
+              ${isExpiring ? '<span class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded font-bold">期限切れ近</span>' : ''}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function exportStockCSV() {
+      let csv = "id,locationId,name,category,qty,minQty,locationDetail,expiry\n";
+      appData.stock.forEach(s => {
+        csv += `${s.id},${s.locationId},${s.name},${s.category},${s.qty},${s.minQty},${s.locationDetail},${s.expiry}\n`;
+      });
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `stock_${new Date().toISOString().slice(0,10)}.csv`;
+      link.click();
+    }
+
+    function importStockCSV(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const lines = e.target.result.split("\n").slice(1);
+        const items = lines.filter(l => l.trim()).map(line => {
+          const [id, locationId, name, category, qty, minQty, locationDetail, expiry] = line.split(",");
+          return { id, locationId, name, category, qty, minQty, locationDetail, expiry: expiry ? expiry.trim() : '' };
+        });
+
+        await fetch(getApiUrl(), {
+          method: 'POST',
+          body: JSON.stringify({ action: 'bulkUpdateStock', items })
+        });
+        alert("備蓄品データが一括更新されました。");
+        loadData();
+      };
+      reader.readAsText(file);
+    }
+
+    // Modal & QR Helper
+    function openRegisterModal() { document.getElementById('registerModal').classList.remove('hidden'); }
+    function closeRegisterModal() { 
+      document.getElementById('registerModal').classList.add('hidden');
+      document.getElementById('modalForm').classList.remove('hidden');
+      document.getElementById('modalQR').classList.add('hidden');
+    }
+    function populateLocationSelect() {
+      const sel = document.getElementById('regLocation');
+      sel.innerHTML = appData.locations.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+    }
+
+    async function submitQuickRegister() {
+      const locationId = document.getElementById('regLocation').value;
+      const name = document.getElementById('regName').value;
+      const phone = document.getElementById('regPhone').value;
+
+      const res = await fetch(getApiUrl(), {
+        method: 'POST',
+        body: JSON.stringify({ action: 'quickRegisterEvacuee', locationId, name, phone })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById('modalForm').classList.add('hidden');
+        document.getElementById('modalQR').classList.remove('hidden');
+        document.getElementById('qrcode').innerHTML = '';
+        
+        // 本人入力用スマホURL
+        const userEditUrl = `${window.location.href.split('?')[0]}?id=${data.id}`;
+        new QRCode(document.getElementById("qrcode"), { text: userEditUrl, width: 128, height: 128 });
+        loadData();
+      }
+    }
+
+    function switchTab(tabName) {
+      ['map', 'evacuee', 'stock'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+      });
+      document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
