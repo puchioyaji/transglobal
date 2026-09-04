@@ -2,8 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PDF 2画面分割 翻訳＆スピーチアプリ</title>
+  
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
   <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
@@ -112,7 +116,6 @@
     }
     .info-text { font-size: 12px; color: #666; margin-left: auto; }
 
-    /* モーダルダイアログ */
     .modal-overlay {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -275,7 +278,6 @@
     let isProcessing = false;
     let currentRenderTask = null;
 
-    // 翻訳履歴の全蓄積用マップ { pageNum: [{ original: string, translated: string }] }
     let translationHistory = {};
 
     let isSelecting = false;
@@ -283,12 +285,21 @@
     let selectedRect = null;
     let isSigning = false;
 
-    // 前のPDF・状態を完全にクリーンアップする関数
+    // 音声APIを物理的に完全にリセットする
+    function forceResetSpeech() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume(); // フリーズ解除
+      }
+    }
+
+    // 完全リセット関数
     async function cleanupPdfDoc() {
       stopProcessing();
+      forceResetSpeech();
 
       if (currentRenderTask) {
-        try { currentRenderTask.cancel(); } catch (e) {}
+        try { await currentRenderTask.cancel(); } catch (e) {}
         currentRenderTask = null;
       }
 
@@ -306,7 +317,7 @@
       currentViewport = null;
       currentPageNum = 1;
       extractedSentences = [];
-      translationHistory = {}; // 履歴のクリア
+      translationHistory = {};
 
       sigOpenBtn.style.display = 'none';
       prevPageBtn.disabled = true;
@@ -317,7 +328,6 @@
       resetSelection();
     }
 
-    // 起動時のリセット
     window.addEventListener('DOMContentLoaded', async () => {
       fileInput.value = '';
       await cleanupPdfDoc();
@@ -326,7 +336,7 @@
 
     function stopProcessing() {
       isProcessing = false;
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      forceResetSpeech();
       stopBtn.style.display = 'none';
       startBtn.style.display = 'inline-block';
       startBtn.disabled = false;
@@ -334,7 +344,6 @@
       updateNavButtons();
     }
 
-    // ファイル選択処理
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -346,7 +355,10 @@
 
       try {
         originalPdfBuffer = await file.arrayBuffer();
-        pdfDoc = await pdfjsLib.getDocument({ data: originalPdfBuffer.slice(0) }).promise;
+        
+        // データを独立させたArrayBufferオブジェクトとして作成
+        const bufferCopy = originalPdfBuffer.slice(0);
+        pdfDoc = await pdfjsLib.getDocument({ data: bufferCopy }).promise;
         
         totalPagesSpan.textContent = pdfDoc.numPages;
         pageNumInput.max = pdfDoc.numPages;
@@ -358,7 +370,7 @@
 
       } catch (err) {
         console.error(err);
-        contentDiv.textContent = 'PDFの読み込みに失敗しました。';
+        contentDiv.textContent = 'PDFの読み込みに失敗しました。ファイルが破損しているか暗号化されている可能性があります。';
       }
     });
 
@@ -366,13 +378,13 @@
       if (!pdfDoc) return;
 
       if (isProcessing) stopProcessing();
-      else if (window.speechSynthesis) window.speechSynthesis.cancel();
+      else forceResetSpeech();
       
       startBtn.disabled = true;
       resetSelection();
 
       if (currentRenderTask) {
-        try { currentRenderTask.cancel(); } catch (e) {}
+        try { await currentRenderTask.cancel(); } catch (e) {}
         currentRenderTask = null;
       }
 
@@ -432,7 +444,6 @@
           contentDiv.innerHTML = '<p style="color: #007bff; font-weight: bold; margin-bottom: 10px;">【範囲選択モード】選択したエリアのテキスト:</p>';
         }
 
-        // 過去の翻訳履歴が存在する場合は事前に復元表示
         const existingPageHistory = translationHistory[currentPageNum] || [];
 
         extractedSentences.forEach((sentence, index) => {
@@ -509,4 +520,216 @@
       const width = Math.abs(endX - startX);
       const height = Math.abs(endY - startY);
 
-      if (width > 10 && height > 10)
+      if (width > 10 && height > 10) {
+        selectedRect = {
+          x1: Math.min(startX, endX),
+          y1: Math.min(startY, endY),
+          x2: Math.max(startX, endX),
+          y2: Math.max(startY, endY)
+        };
+        extractAndDisplayText(selectedRect);
+      } else {
+        resetSelection();
+        extractAndDisplayText();
+      }
+    });
+
+    function updateNavButtons() {
+      if (!pdfDoc) return;
+      prevPageBtn.disabled = currentPageNum <= 1;
+      nextPageBtn.disabled = currentPageNum >= pdfDoc.numPages;
+    }
+
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPageNum > 1) {
+        currentPageNum--;
+        pageNumInput.value = currentPageNum;
+        renderPage(currentPageNum);
+      }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      if (currentPageNum < pdfDoc.numPages) {
+        currentPageNum++;
+        pageNumInput.value = currentPageNum;
+        renderPage(currentPageNum);
+      }
+    });
+
+    pageNumInput.addEventListener('change', () => {
+      let page = parseInt(pageNumInput.value);
+      if (isNaN(page) || page < 1) page = 1;
+      if (page > pdfDoc.numPages) page = pdfDoc.numPages;
+      currentPageNum = page;
+      pageNumInput.value = page;
+      renderPage(currentPageNum);
+    });
+
+    async function translateText(text, targetLang) {
+      try {
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=Autodetect|${targetLang}`);
+        const data = await res.json();
+        return data.responseData.translatedText;
+      } catch (error) {
+        console.error('翻訳エラー:', error);
+        return text;
+      }
+    }
+
+    stopBtn.addEventListener('click', stopProcessing);
+
+    startBtn.addEventListener('click', async () => {
+      isProcessing = true;
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'inline-block';
+
+      prevPageBtn.disabled = false;
+      nextPageBtn.disabled = false;
+      pageNumInput.disabled = false;
+      updateNavButtons();
+
+      const targetLang = targetLangSelect.value;
+      const synth = window.speechSynthesis;
+
+      if (!translationHistory[currentPageNum]) {
+        translationHistory[currentPageNum] = [];
+      }
+
+      for (let i = 0; i < extractedSentences.length; i++) {
+        if (!isProcessing) break;
+
+        const originalText = extractedSentences[i];
+        const blockElem = document.getElementById(`sentence-block-${i}`);
+        const transElem = document.getElementById(`trans-${i}`);
+
+        document.querySelectorAll('.sentence-block').forEach(el => el.classList.remove('highlight'));
+        if (blockElem) {
+          blockElem.classList.add('highlight');
+          blockElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        const translatedText = await translateText(originalText, targetLang);
+        if (!isProcessing) break;
+
+        if (transElem) {
+          transElem.textContent = `┗ 【翻訳】${translatedText}`;
+        }
+
+        translationHistory[currentPageNum][i] = {
+          original: originalText,
+          translated: translatedText
+        };
+
+        await new Promise((resolve) => {
+          forceResetSpeech(); // 音声開始前にキャンセルフリーズを解除
+          const utterance = new SpeechSynthesisUtterance(translatedText);
+          const langMap = { 
+            'JA': 'ja-JP', 'EN': 'en-US', 'DE': 'de-DE', 'FR': 'fr-FR', 
+            'RU': 'ru-RU', 'ZH': 'zh-CN', 'ES': 'es-ES', 'KO': 'ko-KR'  
+          };
+          utterance.lang = langMap[targetLang] || 'ja-JP';
+
+          utterance.onend = () => resolve();
+          utterance.onerror = () => resolve();
+
+          if (isProcessing) synth.speak(utterance);
+          else resolve();
+        });
+      }
+
+      if (isProcessing) {
+        stopProcessing();
+        sigOpenBtn.style.display = 'inline-block';
+        alert('翻訳と読み上げが完了しました。「署名・確認保存」ボタンから一覧・署名入りのPDFを出力できます。');
+      }
+    });
+
+    function initDateSelects() {
+      const today = new Date();
+      const currentYear = today.getFullYear();
+      
+      yearSelect.innerHTML = '';
+      for (let y = currentYear - 2; y <= currentYear + 2; y++) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === currentYear) opt.selected = true;
+        yearSelect.appendChild(opt);
+      }
+
+      monthSelect.innerHTML = '';
+      for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = String(m).padStart(2, '0');
+        opt.textContent = m;
+        if (m === today.getMonth() + 1) opt.selected = true;
+        monthSelect.appendChild(opt);
+      }
+
+      daySelect.innerHTML = '';
+      for (let d = 1; d <= 31; d++) {
+        const opt = document.createElement('option');
+        opt.value = String(d).padStart(2, '0');
+        opt.textContent = d;
+        if (d === today.getDate()) opt.selected = true;
+        daySelect.appendChild(opt);
+      }
+    }
+
+    function clearSigCanvas() {
+      sigCtx.fillStyle = "#ffffff";
+      sigCtx.fillRect(0, 0, sigCanvas.width, sigCanvas.height);
+      sigCtx.lineWidth = 2;
+      sigCtx.lineCap = "round";
+      sigCtx.strokeStyle = "#000000";
+    }
+
+    sigOpenBtn.addEventListener('click', () => {
+      initDateSelects();
+      clearSigCanvas();
+      sigModal.style.display = 'flex';
+    });
+
+    sigCancelBtn.addEventListener('click', () => {
+      sigModal.style.display = 'none';
+    });
+
+    sigClearBtn.addEventListener('click', clearSigCanvas);
+
+    function getSigPos(e) {
+      const rect = sigCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    sigCanvas.addEventListener('mousedown', (e) => {
+      isSigning = true;
+      const pos = getSigPos(e);
+      sigCtx.beginPath();
+      sigCtx.moveTo(pos.x, pos.y);
+    });
+
+    sigCanvas.addEventListener('mousemove', (e) => {
+      if (!isSigning) return;
+      const pos = getSigPos(e);
+      sigCtx.lineTo(pos.x, pos.y);
+      sigCtx.stroke();
+    });
+
+    document.addEventListener('mouseup', () => { isSigning = false; });
+
+    sigSaveBtn.addEventListener('click', async () => {
+      if (!originalPdfBuffer) {
+        alert('PDFデータが存在しません。');
+        return;
+      }
+
+      try {
+        sigSaveBtn.disabled = true;
+        sigSaveBtn.textContent = '翻訳一覧＆PDF生成中...';
+
+        const pdfDocLib = await PDFLib.PDFDocument.load(originalPdfBuffer.slice(0));
+
+        const reportDiv = document.createElement('div');
+        reportDiv.style.width = '794px';
