@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF 2画面分割 翻訳＆スピーチアプリ</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 10px 20px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f8f9fa;
+    }
+    h1 { font-size: 20px; margin: 0 0 10px 0; }
+    .controls {
+      background: #ffffff;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 10px;
+    }
+    .control-group { display: flex; align-items: center; gap: 5px; }
+    label { font-weight: bold; font-size: 14px; }
+    button {
+      padding: 6px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    #stop-btn { background-color: #dc3545; }
+    #stop-btn:hover { background-color: #c82333; }
+    #signature-open-btn {
+      background-color: #28a745;
+      font-weight: bold;
+    }
+    #signature-open-btn:hover { background-color: #218838; }
+
+    .page-nav input { width: 50px; text-align: center; padding: 4px; }
+    .split-container { display: flex; flex: 1; gap: 15px; min-height: 0; }
+    
+    .pdf-viewer-pane {
+      flex: 1;
+      background: #e9ecef;
+      border-radius: 8px;
+      border: 1px solid #ced4da;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      padding: 10px;
+      position: relative;
+    }
+    .canvas-wrapper { position: relative; cursor: crosshair; display: inline-block; background: #fff; }
+    #pdf-canvas {
+      max-width: 100%;
+      max-height: 100%;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      border-radius: 4px;
+      background: #fff;
+      display: block;
+    }
+    .selection-box {
+      position: absolute;
+      border: 2px dashed #ff0000;
+      background-color: rgba(255, 0, 0, 0.15);
+      pointer-events: none;
+      display: none;
+    }
+
+    .text-pane {
+      flex: 1;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #ced4da;
+      padding: 15px;
+      overflow-y: auto;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .highlight {
+      background-color: #ffeb3b;
+      font-weight: bold;
+      padding: 4px 6px;
+      border-radius: 3px;
+    }
+    .sentence-block {
+      margin-bottom: 16px;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .original-text { display: block; line-height: 1.5; color: #333; }
+    .translated-text {
+      display: block;
+      margin-top: 4px;
+      font-weight: bold;
+      color: #0056b3;
+      line-height: 1.5;
+    }
+    .info-text { font-size: 12px; color: #666; margin-left: auto; }
+
+    /* モーダルダイアログ */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 450px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .date-selectors select {
+      padding: 4px;
+      font-size: 14px;
+    }
+    #sign-canvas {
+      border: 1px solid #999;
+      background-color: #fff;
+      cursor: crossorigin;
+      border-radius: 4px;
+    }
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .btn-secondary { background-color: #6c757d; }
+    .btn-warning { background-color: #ffc107; color: #000; }
+  </style>
+</head>
+<body>
+
+  <h1>PDF 2画面分割 翻訳＆スピーチアプリ</h1>
+
+  <div class="controls">
+    <div class="control-group">
+      <label for="pdf-file">PDF:</label>
+      <input type="file" id="pdf-file" accept="application/pdf">
+    </div>
+
+    <div class="control-group page-nav">
+      <button id="prev-page" disabled>＜ 前</button>
+      <span>
+        <input type="number" id="current-page-num" value="1" min="1" disabled> / <span id="total-pages">0</span>
+      </span>
+      <button id="next-page" disabled>次 ＞</button>
+    </div>
+
+    <div class="control-group">
+      <label for="target-lang">言語:</label>
+      <select id="target-lang">
+        <option value="JA">日本語</option>
+        <option value="EN">英語</option>
+        <option value="DE">ドイツ語</option>
+        <option value="FR">フランス語</option>
+        <option value="RU">ロシア語</option>
+        <option value="ZH">中国語（北京語）</option>
+        <option value="ES">スペイン語</option>
+        <option value="KO">韓国語</option>
+      </select>
+    </div>
+
+    <button id="start-btn" disabled>この範囲/ページを翻訳</button>
+    <button id="stop-btn" style="display: none;">停止</button>
+    <button id="signature-open-btn" style="display: none;">✍ 署名・確認保存</button>
+
+    <span class="info-text">※左のPDF上をドラッグして部分選択できます</span>
+  </div>
+
+  <div class="split-container">
+    <div class="pdf-viewer-pane">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <canvas id="pdf-canvas"></canvas>
+        <div class="selection-box" id="selection-box"></div>
+      </div>
+    </div>
+
+    <div class="text-pane" id="content">
+      PDFファイルをアップロードしてください。
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="signature-modal">
+    <div class="modal-content">
+      <div class="modal-header">指差し確認の署名と年月日選択</div>
+      <div class="modal-body">
+        
+        <div class="date-selectors">
+          <label>確認年月日：</label><br>
+          <select id="sign-year"></select> 年
+          <select id="sign-month"></select> 月
+          <select id="sign-day"></select> 日
+        </div>
+
+        <div>
+          <label>手書き署名：</label>
+          <canvas id="sign-canvas" width="400" height="150"></canvas>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button id="sign-clear-btn" class="btn-warning">クリア</button>
+        <button id="sign-cancel-btn" class="btn-secondary">キャンセル</button>
+        <button id="sign-save-btn">最終頁の後に一覧を結合して保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    const fileInput = document.getElementById('pdf-file');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const sigOpenBtn = document.getElementById('signature-open-btn');
+    const targetLangSelect = document.getElementById('target-lang');
+    const contentDiv = document.getElementById('content');
+    const canvas = document.getElementById('pdf-canvas');
+    const wrapper = document.getElementById('canvas-wrapper');
+    const selectionBox = document.getElementById('selection-box');
+    const ctx = canvas.getContext('2d');
+    
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    const pageNumInput = document.getElementById('current-page-num');
+    const totalPagesSpan = document.getElementById('total-pages');
+
+    const sigModal = document.getElementById('signature-modal');
+    const sigCanvas = document.getElementById('sign-canvas');
+    const sigCtx = sigCanvas.getContext('2d');
+    const yearSelect = document.getElementById('sign-year');
+    const monthSelect = document.getElementById('sign-month');
+    const daySelect = document.getElementById('sign-day');
+    const sigClearBtn = document.getElementById('sign-clear-btn');
+    const sigCancelBtn = document.getElementById('sign-cancel-btn');
+    const sigSaveBtn = document.getElementById('sign-save-btn');
+
+    let originalPdfBuffer = null;
+    let pdfDoc = null;
+    let currentPageObj = null;
+    let currentViewport = null;
+    let currentPageNum = 1;
+    let extractedSentences = [];
+    let isProcessing = false;
+    let currentRenderTask = null;
+
+    // 翻訳履歴の全蓄積用マップ { pageNum: [{ original: string, translated: string }] }
+    let translationHistory = {};
+
+    let isSelecting = false;
+    let startX = 0, startY = 0;
+    let selectedRect = null;
+    let isSigning = false;
+
+    // 前のPDF・状態を完全にクリーンアップする関数
+    async function cleanupPdfDoc() {
+      stopProcessing();
+
+      if (currentRenderTask) {
+        try { currentRenderTask.cancel(); } catch (e) {}
+        currentRenderTask = null;
+      }
+
+      if (pdfDoc) {
+        try { await pdfDoc.destroy(); } catch (e) {}
+        pdfDoc = null;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.width = 0;
+      canvas.height = 0;
+
+      originalPdfBuffer = null;
+      currentPageObj = null;
+      currentViewport = null;
+      currentPageNum = 1;
+      extractedSentences = [];
+      translationHistory = {}; // 履歴のクリア
+
+      sigOpenBtn.style.display = 'none';
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+      pageNumInput.disabled = true;
+      pageNumInput.value = 1;
+      totalPagesSpan.textContent = '0';
+      resetSelection();
+    }
+
+    // 起動時のリセット
+    window.addEventListener('DOMContentLoaded', async () => {
+      fileInput.value = '';
+      await cleanupPdfDoc();
+      contentDiv.textContent = 'PDFファイルをアップロードしてください。';
+    });
+
+    function stopProcessing() {
+      isProcessing = false;
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      stopBtn.style.display = 'none';
+      startBtn.style.display = 'inline-block';
+      startBtn.disabled = false;
+      pageNumInput.disabled = false;
+      updateNavButtons();
+    }
+
+    // ファイル選択処理
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      await cleanupPdfDoc();
+
+      contentDiv.textContent = 'PDFを読み込んでいます...';
+      startBtn.disabled = true;
+
+      try {
+        originalPdfBuffer = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({ data: originalPdfBuffer.slice(0) }).promise;
+        
+        totalPagesSpan.textContent = pdfDoc.numPages;
+        pageNumInput.max = pdfDoc.numPages;
+        currentPageNum = 1;
+        pageNumInput.value = 1;
+        pageNumInput.disabled = false;
+
+        await renderPage(currentPageNum);
+
+      } catch (err) {
+        console.error(err);
+        contentDiv.textContent = 'PDFの読み込みに失敗しました。';
+      }
+    });
+
+    async function renderPage(num) {
+      if (!pdfDoc) return;
+
+      if (isProcessing) stopProcessing();
+      else if (window.speechSynthesis) window.speechSynthesis.cancel();
+      
+      startBtn.disabled = true;
+      resetSelection();
+
+      if (currentRenderTask) {
+        try { currentRenderTask.cancel(); } catch (e) {}
+        currentRenderTask = null;
+      }
+
+      try {
+        currentPageObj = await pdfDoc.getPage(num);
+        currentViewport = currentPageObj.getViewport({ scale: 1.5 });
+
+        canvas.height = currentViewport.height;
+        canvas.width = currentViewport.width;
+
+        const renderContext = { canvasContext: ctx, viewport: currentViewport };
+        currentRenderTask = currentPageObj.render(renderContext);
+        await currentRenderTask.promise;
+        currentRenderTask = null;
+
+        await extractAndDisplayText();
+        updateNavButtons();
+
+      } catch (err) {
+        if (err && err.name !== 'RenderingCancelledException') {
+          console.error(err);
+          contentDiv.textContent = 'ページの読み込み中にエラーが発生しました。';
+        }
+      }
+    }
+
+    async function extractAndDisplayText(cropRect = null) {
+      if (!currentPageObj) return;
+
+      const textContent = await currentPageObj.getTextContent();
+      let rawText = '';
+
+      if (cropRect) {
+        const items = textContent.items.filter(item => {
+          const tx = pdfjsLib.Util.transform(currentViewport.transform, item.transform);
+          const x = tx[4];
+          const y = tx[5];
+          return x >= cropRect.x1 && x <= cropRect.x2 && y >= cropRect.y1 && y <= cropRect.y2;
+        });
+        rawText = items.map(item => item.str).join(' ');
+      } else {
+        rawText = textContent.items.map(item => item.str).join(' ');
+      }
+
+      extractedSentences = rawText
+        .split(/(?<=[.!?🈩。！？])\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      contentDiv.innerHTML = '';
+
+      if (extractedSentences.length === 0) {
+        contentDiv.innerHTML = `<p style="color: #666;">※ ${cropRect ? '選択した範囲' : 'このページ'}にテキストは見つかりませんでした。</p>`;
+        startBtn.disabled = true;
+      } else {
+        if (cropRect) {
+          contentDiv.innerHTML = '<p style="color: #007bff; font-weight: bold; margin-bottom: 10px;">【範囲選択モード】選択したエリアのテキスト:</p>';
+        }
+
+        // 過去の翻訳履歴が存在する場合は事前に復元表示
+        const existingPageHistory = translationHistory[currentPageNum] || [];
+
+        extractedSentences.forEach((sentence, index) => {
+          const div = document.createElement('div');
+          div.id = `sentence-block-${index}`;
+          div.className = 'sentence-block';
+
+          const origSpan = document.createElement('span');
+          origSpan.className = 'original-text';
+          origSpan.textContent = sentence;
+
+          const transSpan = document.createElement('span');
+          transSpan.id = `trans-${index}`;
+          transSpan.className = 'translated-text';
+
+          if (existingPageHistory[index] && existingPageHistory[index].translated) {
+            transSpan.textContent = `┗ 【翻訳】${existingPageHistory[index].translated}`;
+          }
+
+          div.appendChild(origSpan);
+          div.appendChild(transSpan);
+          contentDiv.appendChild(div);
+        });
+        startBtn.disabled = false;
+      }
+    }
+
+    function resetSelection() {
+      selectedRect = null;
+      selectionBox.style.display = 'none';
+    }
+
+    wrapper.addEventListener('mousedown', (e) => {
+      if (!currentPageObj || isProcessing) return;
+
+      isSelecting = true;
+      const rect = wrapper.getBoundingClientRect();
+      startX = e.clientX - rect.left;
+      startY = e.clientY - rect.top;
+
+      selectionBox.style.left = `${startX}px`;
+      selectionBox.style.top = `${startY}px`;
+      selectionBox.style.width = '0px';
+      selectionBox.style.height = '0px';
+      selectionBox.style.display = 'block';
+    });
+
+    wrapper.addEventListener('mousemove', (e) => {
+      if (!isSelecting) return;
+
+      const rect = wrapper.getBoundingClientRect();
+      const currentX = e.clientX - rect.left;
+      const currentY = e.clientY - rect.top;
+
+      const width = Math.abs(currentX - startX);
+      const height = Math.abs(currentY - startY);
+      const left = Math.min(startX, currentX);
+      const top = Math.min(startY, currentY);
+
+      selectionBox.style.left = `${left}px`;
+      selectionBox.style.top = `${top}px`;
+      selectionBox.style.width = `${width}px`;
+      selectionBox.style.height = `${height}px`;
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (!isSelecting) return;
+      isSelecting = false;
+
+      const rect = wrapper.getBoundingClientRect();
+      const endX = e.clientX - rect.left;
+      const endY = e.clientY - rect.top;
+
+      const width = Math.abs(endX - startX);
+      const height = Math.abs(endY - startY);
+
+      if (width > 10 && height > 10)
