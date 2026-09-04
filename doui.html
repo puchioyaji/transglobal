@@ -10,7 +10,7 @@
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-  <script src="https://unpkg.com/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+  
   <style>
     * { box-sizing: border-box; }
     body {
@@ -285,15 +285,13 @@
     let selectedRect = null;
     let isSigning = false;
 
-    // 音声APIを物理的に完全にリセットする
     function forceResetSpeech() {
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
-        window.speechSynthesis.resume(); // フリーズ解除
+        window.speechSynthesis.resume();
       }
     }
 
-    // 完全リセット関数
     async function cleanupPdfDoc() {
       stopProcessing();
       forceResetSpeech();
@@ -355,8 +353,6 @@
 
       try {
         originalPdfBuffer = await file.arrayBuffer();
-        
-        // データを独立させたArrayBufferオブジェクトとして作成
         const bufferCopy = originalPdfBuffer.slice(0);
         pdfDoc = await pdfjsLib.getDocument({ data: bufferCopy }).promise;
         
@@ -370,7 +366,7 @@
 
       } catch (err) {
         console.error(err);
-        contentDiv.textContent = 'PDFの読み込みに失敗しました。ファイルが破損しているか暗号化されている可能性があります。';
+        contentDiv.textContent = 'PDFの読み込みに失敗しました。';
       }
     });
 
@@ -621,7 +617,7 @@
         };
 
         await new Promise((resolve) => {
-          forceResetSpeech(); // 音声開始前にキャンセルフリーズを解除
+          forceResetSpeech();
           const utterance = new SpeechSynthesisUtterance(translatedText);
           const langMap = { 
             'JA': 'ja-JP', 'EN': 'en-US', 'DE': 'de-DE', 'FR': 'fr-FR', 
@@ -719,6 +715,7 @@
 
     document.addEventListener('mouseup', () => { isSigning = false; });
 
+    // HTML5 Canvas を使用して全翻訳一覧＆署名を高確実性にPDFへ描画結合
     sigSaveBtn.addEventListener('click', async () => {
       if (!originalPdfBuffer) {
         alert('PDFデータが存在しません。');
@@ -727,9 +724,129 @@
 
       try {
         sigSaveBtn.disabled = true;
-        sigSaveBtn.textContent = '翻訳一覧＆PDF生成中...';
+        sigSaveBtn.textContent = 'PDF生成中...';
 
+        // 1. A4サイズのCanvas要素(800x1131px)を作成
+        const reportCanvas = document.createElement('canvas');
+        reportCanvas.width = 800;
+        reportCanvas.height = 1131;
+        const rCtx = reportCanvas.getContext('2d');
+
+        // 背景塗りつぶし
+        rCtx.fillStyle = '#ffffff';
+        rCtx.fillRect(0, 0, 800, 1131);
+
+        // ヘッダータイトルの描画
+        rCtx.fillStyle = '#007bff';
+        rCtx.fillRect(40, 40, 720, 3);
+        rCtx.fillStyle = '#333333';
+        rCtx.font = 'bold 20px sans-serif';
+        rCtx.fillText('CONFIRMED TRANSLATION REPORT', 40, 30);
+
+        let currentY = 70;
+
+        // 各ページの翻訳履歴を描画
+        const pagesKeys = Object.keys(translationHistory).sort((a,b) => Number(a) - Number(b));
+
+        if (pagesKeys.length === 0) {
+          rCtx.fillStyle = '#666666';
+          rCtx.font = '14px sans-serif';
+          rCtx.fillText('※ 翻訳履歴はありません。', 40, currentY);
+          currentY += 30;
+        } else {
+          pagesKeys.forEach(pNum => {
+            if (currentY > 800) return; // ページオーバーフロー防止
+
+            rCtx.fillStyle = '#007bff';
+            rCtx.font = 'bold 15px sans-serif';
+            rCtx.fillText(`■ Page ${pNum}`, 40, currentY);
+            currentY += 20;
+
+            translationHistory[pNum].forEach(item => {
+              if (currentY > 820) return;
+
+              // 枠線
+              rCtx.fillStyle = '#f8f9fa';
+              rCtx.fillRect(40, currentY, 720, 50);
+              rCtx.fillStyle = '#007bff';
+              rCtx.fillRect(40, currentY, 4, 50);
+
+              rCtx.fillStyle = '#333333';
+              rCtx.font = '12px sans-serif';
+              const origText = item.original.length > 60 ? item.original.substring(0, 57) + '...' : item.original;
+              rCtx.fillText(`[Original]: ${origText}`, 52, currentY + 20);
+
+              rCtx.fillStyle = '#0056b3';
+              rCtx.font = 'bold 12px sans-serif';
+              const transText = item.translated.length > 60 ? item.translated.substring(0, 57) + '...' : item.translated;
+              rCtx.fillText(`[Translation]: ${transText}`, 52, currentY + 38);
+
+              currentY += 60;
+            });
+
+            currentY += 10;
+          });
+        }
+
+        // 最下部に署名スタンプを描画
+        const stampX = 460;
+        const stampY = Math.max(currentY + 20, 880);
+
+        rCtx.fillStyle = '#ffffff';
+        rCtx.fillRect(stampX, stampY, 300, 180);
+        rCtx.strokeStyle = '#d9534f';
+        rCtx.lineWidth = 3;
+        rCtx.strokeRect(stampX, stampY, 300, 180);
+
+        rCtx.fillStyle = '#d9534f';
+        rCtx.font = 'bold 16px sans-serif';
+        rCtx.fillText('☑ CONFIRMED & SIGNED', stampX + 15, stampY + 30);
+
+        const dateStr = `${yearSelect.value}/${monthSelect.value}/${daySelect.value}`;
+        rCtx.fillStyle = '#333333';
+        rCtx.font = '14px sans-serif';
+        rCtx.fillText(`Date: ${dateStr}`, stampX + 15, stampY + 55);
+
+        // 手書きサインの読み込みと描画
+        const sigImg = new Image();
+        sigImg.src = sigCanvas.toDataURL('image/png');
+        await new Promise((resolve) => { sigImg.onload = resolve; });
+        rCtx.drawImage(sigImg, stampX + 15, stampY + 65, 270, 100);
+
+        // 2. pdf-lib で原本PDFを読み込んで最終ページへ追加
         const pdfDocLib = await PDFLib.PDFDocument.load(originalPdfBuffer.slice(0));
+        
+        const reportImageBytes = reportCanvas.toDataURL('image/png');
+        const embeddedReportImg = await pdfDocLib.embedPng(reportImageBytes);
 
-        const reportDiv = document.createElement('div');
-        reportDiv.style.width = '794px';
+        const newPage = pdfDocLib.addPage([595.28, 841.89]); // A4サイズ
+        newPage.drawImage(embeddedReportImg, {
+          x: 0,
+          y: 0,
+          width: 595.28,
+          height: 841.89,
+        });
+
+        // 3. ファイルのダウンロード処理
+        const modifiedPdfBytes = await pdfDocLib.save();
+        const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `契約書_全翻訳一覧・署名完了_${yearSelect.value}${monthSelect.value}${daySelect.value}.pdf`;
+        link.click();
+
+        sigModal.style.display = 'none';
+        alert('最終ページの後に全翻訳一覧と署名が結合された新しいPDFを保存しました。');
+
+      } catch (err) {
+        console.error('PDF結合エラー詳細:', err);
+        alert('PDFへの結合処理中にエラーが発生しました。ブラウザのコンソール（F12）をご確認ください。');
+      } finally {
+        sigSaveBtn.disabled = false;
+        sigSaveBtn.textContent = '最終頁の後に一覧を結合して保存';
+      }
+    });
+  </script>
+</body>
+</html>
