@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>PDF 2画面分割 翻訳＆スピーチアプリ</title>
   
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -22,7 +22,7 @@
       height: 100vh;
       background-color: #f8f9fa;
     }
-    h1 { font-size: 20px; margin: 0 0 10px 0; }
+    h1 { font-size: 18px; margin: 0 0 10px 0; }
     .controls {
       background: #ffffff;
       padding: 10px 15px;
@@ -31,14 +31,14 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 15px;
+      gap: 10px;
       margin-bottom: 10px;
     }
     .control-group { display: flex; align-items: center; gap: 5px; }
-    label { font-weight: bold; font-size: 14px; }
+    label { font-weight: bold; font-size: 13px; }
     button {
       padding: 6px 12px;
-      font-size: 14px;
+      font-size: 13px;
       cursor: pointer;
       background-color: #007bff;
       color: white;
@@ -47,15 +47,14 @@
     }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
     #stop-btn { background-color: #dc3545; }
-    #stop-btn:hover { background-color: #c82333; }
-    #signature-open-btn {
-      background-color: #28a745;
-      font-weight: bold;
-    }
-    #signature-open-btn:hover { background-color: #218838; }
+    #signature-open-btn { background-color: #28a745; font-weight: bold; }
 
-    .page-nav input { width: 50px; text-align: center; padding: 4px; }
-    .split-container { display: flex; flex: 1; gap: 15px; min-height: 0; }
+    .page-nav input { width: 45px; text-align: center; padding: 4px; }
+    .split-container { display: flex; flex: 1; gap: 15px; min-height: 0; flex-direction: column; }
+    @media (min-width: 768px) {
+      .split-container { flex-direction: row; }
+      h1 { font-size: 20px; }
+    }
     
     .pdf-viewer-pane {
       flex: 1;
@@ -69,7 +68,14 @@
       padding: 10px;
       position: relative;
     }
-    .canvas-wrapper { position: relative; cursor: crosshair; display: inline-block; background: #fff; }
+    /* タッチ操作時に画面全体がスクロールするのを防止 */
+    .canvas-wrapper { 
+      position: relative; 
+      cursor: crosshair; 
+      display: inline-block; 
+      background: #fff;
+      touch-action: none; 
+    }
     #pdf-canvas {
       max-width: 100%;
       max-height: 100%;
@@ -81,7 +87,7 @@
     .selection-box {
       position: absolute;
       border: 2px dashed #ff0000;
-      background-color: rgba(255, 0, 0, 0.15);
+      background-color: rgba(255, 0, 0, 0.2);
       pointer-events: none;
       display: none;
     }
@@ -114,7 +120,7 @@
       color: #0056b3;
       line-height: 1.5;
     }
-    .info-text { font-size: 12px; color: #666; margin-left: auto; }
+    .info-text { font-size: 11px; color: #666; width: 100%; }
 
     .modal-overlay {
       position: fixed;
@@ -129,35 +135,22 @@
       background: #fff;
       padding: 20px;
       border-radius: 8px;
-      width: 450px;
+      width: 90%;
+      max-width: 450px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    .modal-header {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 15px;
-    }
-    .modal-body {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-    .date-selectors select {
-      padding: 4px;
-      font-size: 14px;
-    }
+    .modal-header { font-weight: bold; font-size: 16px; margin-bottom: 15px; }
+    .modal-body { display: flex; flex-direction: column; gap: 15px; }
+    .date-selectors select { padding: 4px; font-size: 14px; }
     #sign-canvas {
       border: 1px solid #999;
       background-color: #fff;
-      cursor: crossorigin;
       border-radius: 4px;
+      touch-action: none;
+      width: 100%;
+      height: 150px;
     }
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 15px;
-    }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
     .btn-secondary { background-color: #6c757d; }
     .btn-warning { background-color: #ffc107; color: #000; }
   </style>
@@ -198,7 +191,7 @@
     <button id="stop-btn" style="display: none;">停止</button>
     <button id="signature-open-btn" style="display: none;">✍ 署名・確認保存</button>
 
-    <span class="info-text">※左のPDF上をドラッグして部分選択できます</span>
+    <span class="info-text">※PDF上を指やマウスでとなぞると部分指定できます</span>
   </div>
 
   <div class="split-container">
@@ -228,625 +221,8 @@
 
         <div>
           <label>手書き署名：</label>
-          <canvas id="sign-canvas" width="400" height="150"></canvas>
+          <canvas id="sign-canvas"></canvas>
         </div>
 
       </div>
       <div class="modal-footer">
-        <button id="sign-clear-btn" class="btn-warning">クリア</button>
-        <button id="sign-cancel-btn" class="btn-secondary">キャンセル</button>
-        <button id="sign-save-btn">最終頁の後に一覧を結合して保存</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-    const fileInput = document.getElementById('pdf-file');
-    const startBtn = document.getElementById('start-btn');
-    const stopBtn = document.getElementById('stop-btn');
-    const sigOpenBtn = document.getElementById('signature-open-btn');
-    const targetLangSelect = document.getElementById('target-lang');
-    const contentDiv = document.getElementById('content');
-    const canvas = document.getElementById('pdf-canvas');
-    const wrapper = document.getElementById('canvas-wrapper');
-    const selectionBox = document.getElementById('selection-box');
-    const ctx = canvas.getContext('2d');
-    
-    const prevPageBtn = document.getElementById('prev-page');
-    const nextPageBtn = document.getElementById('next-page');
-    const pageNumInput = document.getElementById('current-page-num');
-    const totalPagesSpan = document.getElementById('total-pages');
-
-    const sigModal = document.getElementById('signature-modal');
-    const sigCanvas = document.getElementById('sign-canvas');
-    const sigCtx = sigCanvas.getContext('2d');
-    const yearSelect = document.getElementById('sign-year');
-    const monthSelect = document.getElementById('sign-month');
-    const daySelect = document.getElementById('sign-day');
-    const sigClearBtn = document.getElementById('sign-clear-btn');
-    const sigCancelBtn = document.getElementById('sign-cancel-btn');
-    const sigSaveBtn = document.getElementById('sign-save-btn');
-
-    let originalPdfBuffer = null;
-    let pdfDoc = null;
-    let currentPageObj = null;
-    let currentViewport = null;
-    let currentPageNum = 1;
-    let extractedSentences = [];
-    let isProcessing = false;
-    let currentRenderTask = null;
-
-    let translationHistory = {};
-
-    let isSelecting = false;
-    let startX = 0, startY = 0;
-    let selectedRect = null;
-    let isSigning = false;
-
-    function forceResetSpeech() {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.resume();
-      }
-    }
-
-    async function cleanupPdfDoc() {
-      stopProcessing();
-      forceResetSpeech();
-
-      if (currentRenderTask) {
-        try { await currentRenderTask.cancel(); } catch (e) {}
-        currentRenderTask = null;
-      }
-
-      if (pdfDoc) {
-        try { await pdfDoc.destroy(); } catch (e) {}
-        pdfDoc = null;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      canvas.width = 0;
-      canvas.height = 0;
-
-      originalPdfBuffer = null;
-      currentPageObj = null;
-      currentViewport = null;
-      currentPageNum = 1;
-      extractedSentences = [];
-      translationHistory = {};
-
-      sigOpenBtn.style.display = 'none';
-      prevPageBtn.disabled = true;
-      nextPageBtn.disabled = true;
-      pageNumInput.disabled = true;
-      pageNumInput.value = 1;
-      totalPagesSpan.textContent = '0';
-      resetSelection();
-    }
-
-    window.addEventListener('DOMContentLoaded', async () => {
-      fileInput.value = '';
-      await cleanupPdfDoc();
-      contentDiv.textContent = 'PDFファイルをアップロードしてください。';
-    });
-
-    function stopProcessing() {
-      isProcessing = false;
-      forceResetSpeech();
-      stopBtn.style.display = 'none';
-      startBtn.style.display = 'inline-block';
-      startBtn.disabled = false;
-      pageNumInput.disabled = false;
-      updateNavButtons();
-    }
-
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      await cleanupPdfDoc();
-
-      contentDiv.textContent = 'PDFを読み込んでいます...';
-      startBtn.disabled = true;
-
-      try {
-        originalPdfBuffer = await file.arrayBuffer();
-        const bufferCopy = originalPdfBuffer.slice(0);
-        pdfDoc = await pdfjsLib.getDocument({ data: bufferCopy }).promise;
-        
-        totalPagesSpan.textContent = pdfDoc.numPages;
-        pageNumInput.max = pdfDoc.numPages;
-        currentPageNum = 1;
-        pageNumInput.value = 1;
-        pageNumInput.disabled = false;
-
-        await renderPage(currentPageNum);
-
-      } catch (err) {
-        console.error(err);
-        contentDiv.textContent = 'PDFの読み込みに失敗しました。';
-      }
-    });
-
-    async function renderPage(num) {
-      if (!pdfDoc) return;
-
-      if (isProcessing) stopProcessing();
-      else forceResetSpeech();
-      
-      startBtn.disabled = true;
-      resetSelection();
-
-      if (currentRenderTask) {
-        try { await currentRenderTask.cancel(); } catch (e) {}
-        currentRenderTask = null;
-      }
-
-      try {
-        currentPageObj = await pdfDoc.getPage(num);
-        currentViewport = currentPageObj.getViewport({ scale: 1.5 });
-
-        canvas.height = currentViewport.height;
-        canvas.width = currentViewport.width;
-
-        const renderContext = { canvasContext: ctx, viewport: currentViewport };
-        currentRenderTask = currentPageObj.render(renderContext);
-        await currentRenderTask.promise;
-        currentRenderTask = null;
-
-        await extractAndDisplayText();
-        updateNavButtons();
-
-      } catch (err) {
-        if (err && err.name !== 'RenderingCancelledException') {
-          console.error(err);
-          contentDiv.textContent = 'ページの読み込み中にエラーが発生しました。';
-        }
-      }
-    }
-
-    async function extractAndDisplayText(cropRect = null) {
-      if (!currentPageObj) return;
-
-      const textContent = await currentPageObj.getTextContent();
-      let rawText = '';
-
-      if (cropRect) {
-        const items = textContent.items.filter(item => {
-          const tx = pdfjsLib.Util.transform(currentViewport.transform, item.transform);
-          const x = tx[4];
-          const y = tx[5];
-          return x >= cropRect.x1 && x <= cropRect.x2 && y >= cropRect.y1 && y <= cropRect.y2;
-        });
-        rawText = items.map(item => item.str).join(' ');
-      } else {
-        rawText = textContent.items.map(item => item.str).join(' ');
-      }
-
-      extractedSentences = rawText
-        .split(/(?<=[.!?🈩。！？])\s+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-
-      contentDiv.innerHTML = '';
-
-      if (extractedSentences.length === 0) {
-        contentDiv.innerHTML = `<p style="color: #666;">※ ${cropRect ? '選択した範囲' : 'このページ'}にテキストは見つかりませんでした。</p>`;
-        startBtn.disabled = true;
-      } else {
-        if (cropRect) {
-          contentDiv.innerHTML = '<p style="color: #007bff; font-weight: bold; margin-bottom: 10px;">【範囲選択モード】選択したエリアのテキスト:</p>';
-        }
-
-        const existingPageHistory = translationHistory[currentPageNum] || [];
-
-        extractedSentences.forEach((sentence, index) => {
-          const div = document.createElement('div');
-          div.id = `sentence-block-${index}`;
-          div.className = 'sentence-block';
-
-          const origSpan = document.createElement('span');
-          origSpan.className = 'original-text';
-          origSpan.textContent = sentence;
-
-          const transSpan = document.createElement('span');
-          transSpan.id = `trans-${index}`;
-          transSpan.className = 'translated-text';
-
-          if (existingPageHistory[index] && existingPageHistory[index].translated) {
-            transSpan.textContent = `┗ 【翻訳】${existingPageHistory[index].translated}`;
-          }
-
-          div.appendChild(origSpan);
-          div.appendChild(transSpan);
-          contentDiv.appendChild(div);
-        });
-        startBtn.disabled = false;
-      }
-    }
-
-    function resetSelection() {
-      selectedRect = null;
-      selectionBox.style.display = 'none';
-    }
-
-    wrapper.addEventListener('mousedown', (e) => {
-      if (!currentPageObj || isProcessing) return;
-
-      isSelecting = true;
-      const rect = wrapper.getBoundingClientRect();
-      startX = e.clientX - rect.left;
-      startY = e.clientY - rect.top;
-
-      selectionBox.style.left = `${startX}px`;
-      selectionBox.style.top = `${startY}px`;
-      selectionBox.style.width = '0px';
-      selectionBox.style.height = '0px';
-      selectionBox.style.display = 'block';
-    });
-
-    wrapper.addEventListener('mousemove', (e) => {
-      if (!isSelecting) return;
-
-      const rect = wrapper.getBoundingClientRect();
-      const currentX = e.clientX - rect.left;
-      const currentY = e.clientY - rect.top;
-
-      const width = Math.abs(currentX - startX);
-      const height = Math.abs(currentY - startY);
-      const left = Math.min(startX, currentX);
-      const top = Math.min(startY, currentY);
-
-      selectionBox.style.left = `${left}px`;
-      selectionBox.style.top = `${top}px`;
-      selectionBox.style.width = `${width}px`;
-      selectionBox.style.height = `${height}px`;
-    });
-
-    document.addEventListener('mouseup', (e) => {
-      if (!isSelecting) return;
-      isSelecting = false;
-
-      const rect = wrapper.getBoundingClientRect();
-      const endX = e.clientX - rect.left;
-      const endY = e.clientY - rect.top;
-
-      const width = Math.abs(endX - startX);
-      const height = Math.abs(endY - startY);
-
-      if (width > 10 && height > 10) {
-        selectedRect = {
-          x1: Math.min(startX, endX),
-          y1: Math.min(startY, endY),
-          x2: Math.max(startX, endX),
-          y2: Math.max(startY, endY)
-        };
-        extractAndDisplayText(selectedRect);
-      } else {
-        resetSelection();
-        extractAndDisplayText();
-      }
-    });
-
-    function updateNavButtons() {
-      if (!pdfDoc) return;
-      prevPageBtn.disabled = currentPageNum <= 1;
-      nextPageBtn.disabled = currentPageNum >= pdfDoc.numPages;
-    }
-
-    prevPageBtn.addEventListener('click', () => {
-      if (currentPageNum > 1) {
-        currentPageNum--;
-        pageNumInput.value = currentPageNum;
-        renderPage(currentPageNum);
-      }
-    });
-
-    nextPageBtn.addEventListener('click', () => {
-      if (currentPageNum < pdfDoc.numPages) {
-        currentPageNum++;
-        pageNumInput.value = currentPageNum;
-        renderPage(currentPageNum);
-      }
-    });
-
-    pageNumInput.addEventListener('change', () => {
-      let page = parseInt(pageNumInput.value);
-      if (isNaN(page) || page < 1) page = 1;
-      if (page > pdfDoc.numPages) page = pdfDoc.numPages;
-      currentPageNum = page;
-      pageNumInput.value = page;
-      renderPage(currentPageNum);
-    });
-
-    async function translateText(text, targetLang) {
-      try {
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=Autodetect|${targetLang}`);
-        const data = await res.json();
-        return data.responseData.translatedText;
-      } catch (error) {
-        console.error('翻訳エラー:', error);
-        return text;
-      }
-    }
-
-    stopBtn.addEventListener('click', stopProcessing);
-
-    startBtn.addEventListener('click', async () => {
-      isProcessing = true;
-      startBtn.style.display = 'none';
-      stopBtn.style.display = 'inline-block';
-
-      prevPageBtn.disabled = false;
-      nextPageBtn.disabled = false;
-      pageNumInput.disabled = false;
-      updateNavButtons();
-
-      const targetLang = targetLangSelect.value;
-      const synth = window.speechSynthesis;
-
-      if (!translationHistory[currentPageNum]) {
-        translationHistory[currentPageNum] = [];
-      }
-
-      for (let i = 0; i < extractedSentences.length; i++) {
-        if (!isProcessing) break;
-
-        const originalText = extractedSentences[i];
-        const blockElem = document.getElementById(`sentence-block-${i}`);
-        const transElem = document.getElementById(`trans-${i}`);
-
-        document.querySelectorAll('.sentence-block').forEach(el => el.classList.remove('highlight'));
-        if (blockElem) {
-          blockElem.classList.add('highlight');
-          blockElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-
-        const translatedText = await translateText(originalText, targetLang);
-        if (!isProcessing) break;
-
-        if (transElem) {
-          transElem.textContent = `┗ 【翻訳】${translatedText}`;
-        }
-
-        translationHistory[currentPageNum][i] = {
-          original: originalText,
-          translated: translatedText
-        };
-
-        await new Promise((resolve) => {
-          forceResetSpeech();
-          const utterance = new SpeechSynthesisUtterance(translatedText);
-          const langMap = { 
-            'JA': 'ja-JP', 'EN': 'en-US', 'DE': 'de-DE', 'FR': 'fr-FR', 
-            'RU': 'ru-RU', 'ZH': 'zh-CN', 'ES': 'es-ES', 'KO': 'ko-KR'  
-          };
-          utterance.lang = langMap[targetLang] || 'ja-JP';
-
-          utterance.onend = () => resolve();
-          utterance.onerror = () => resolve();
-
-          if (isProcessing) synth.speak(utterance);
-          else resolve();
-        });
-      }
-
-      if (isProcessing) {
-        stopProcessing();
-        sigOpenBtn.style.display = 'inline-block';
-        alert('翻訳と読み上げが完了しました。「署名・確認保存」ボタンから一覧・署名入りのPDFを出力できます。');
-      }
-    });
-
-    function initDateSelects() {
-      const today = new Date();
-      const currentYear = today.getFullYear();
-      
-      yearSelect.innerHTML = '';
-      for (let y = currentYear - 2; y <= currentYear + 2; y++) {
-        const opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        if (y === currentYear) opt.selected = true;
-        yearSelect.appendChild(opt);
-      }
-
-      monthSelect.innerHTML = '';
-      for (let m = 1; m <= 12; m++) {
-        const opt = document.createElement('option');
-        opt.value = String(m).padStart(2, '0');
-        opt.textContent = m;
-        if (m === today.getMonth() + 1) opt.selected = true;
-        monthSelect.appendChild(opt);
-      }
-
-      daySelect.innerHTML = '';
-      for (let d = 1; d <= 31; d++) {
-        const opt = document.createElement('option');
-        opt.value = String(d).padStart(2, '0');
-        opt.textContent = d;
-        if (d === today.getDate()) opt.selected = true;
-        daySelect.appendChild(opt);
-      }
-    }
-
-    function clearSigCanvas() {
-      sigCtx.fillStyle = "#ffffff";
-      sigCtx.fillRect(0, 0, sigCanvas.width, sigCanvas.height);
-      sigCtx.lineWidth = 2;
-      sigCtx.lineCap = "round";
-      sigCtx.strokeStyle = "#000000";
-    }
-
-    sigOpenBtn.addEventListener('click', () => {
-      initDateSelects();
-      clearSigCanvas();
-      sigModal.style.display = 'flex';
-    });
-
-    sigCancelBtn.addEventListener('click', () => {
-      sigModal.style.display = 'none';
-    });
-
-    sigClearBtn.addEventListener('click', clearSigCanvas);
-
-    function getSigPos(e) {
-      const rect = sigCanvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-      return { x: clientX - rect.left, y: clientY - rect.top };
-    }
-
-    sigCanvas.addEventListener('mousedown', (e) => {
-      isSigning = true;
-      const pos = getSigPos(e);
-      sigCtx.beginPath();
-      sigCtx.moveTo(pos.x, pos.y);
-    });
-
-    sigCanvas.addEventListener('mousemove', (e) => {
-      if (!isSigning) return;
-      const pos = getSigPos(e);
-      sigCtx.lineTo(pos.x, pos.y);
-      sigCtx.stroke();
-    });
-
-    document.addEventListener('mouseup', () => { isSigning = false; });
-
-    // HTML5 Canvas を使用して全翻訳一覧＆署名を高確実性にPDFへ描画結合
-    sigSaveBtn.addEventListener('click', async () => {
-      if (!originalPdfBuffer) {
-        alert('PDFデータが存在しません。');
-        return;
-      }
-
-      try {
-        sigSaveBtn.disabled = true;
-        sigSaveBtn.textContent = 'PDF生成中...';
-
-        // 1. A4サイズのCanvas要素(800x1131px)を作成
-        const reportCanvas = document.createElement('canvas');
-        reportCanvas.width = 800;
-        reportCanvas.height = 1131;
-        const rCtx = reportCanvas.getContext('2d');
-
-        // 背景塗りつぶし
-        rCtx.fillStyle = '#ffffff';
-        rCtx.fillRect(0, 0, 800, 1131);
-
-        // ヘッダータイトルの描画
-        rCtx.fillStyle = '#007bff';
-        rCtx.fillRect(40, 40, 720, 3);
-        rCtx.fillStyle = '#333333';
-        rCtx.font = 'bold 20px sans-serif';
-        rCtx.fillText('CONFIRMED TRANSLATION REPORT', 40, 30);
-
-        let currentY = 70;
-
-        // 各ページの翻訳履歴を描画
-        const pagesKeys = Object.keys(translationHistory).sort((a,b) => Number(a) - Number(b));
-
-        if (pagesKeys.length === 0) {
-          rCtx.fillStyle = '#666666';
-          rCtx.font = '14px sans-serif';
-          rCtx.fillText('※ 翻訳履歴はありません。', 40, currentY);
-          currentY += 30;
-        } else {
-          pagesKeys.forEach(pNum => {
-            if (currentY > 800) return; // ページオーバーフロー防止
-
-            rCtx.fillStyle = '#007bff';
-            rCtx.font = 'bold 15px sans-serif';
-            rCtx.fillText(`■ Page ${pNum}`, 40, currentY);
-            currentY += 20;
-
-            translationHistory[pNum].forEach(item => {
-              if (currentY > 820) return;
-
-              // 枠線
-              rCtx.fillStyle = '#f8f9fa';
-              rCtx.fillRect(40, currentY, 720, 50);
-              rCtx.fillStyle = '#007bff';
-              rCtx.fillRect(40, currentY, 4, 50);
-
-              rCtx.fillStyle = '#333333';
-              rCtx.font = '12px sans-serif';
-              const origText = item.original.length > 60 ? item.original.substring(0, 57) + '...' : item.original;
-              rCtx.fillText(`[Original]: ${origText}`, 52, currentY + 20);
-
-              rCtx.fillStyle = '#0056b3';
-              rCtx.font = 'bold 12px sans-serif';
-              const transText = item.translated.length > 60 ? item.translated.substring(0, 57) + '...' : item.translated;
-              rCtx.fillText(`[Translation]: ${transText}`, 52, currentY + 38);
-
-              currentY += 60;
-            });
-
-            currentY += 10;
-          });
-        }
-
-        // 最下部に署名スタンプを描画
-        const stampX = 460;
-        const stampY = Math.max(currentY + 20, 880);
-
-        rCtx.fillStyle = '#ffffff';
-        rCtx.fillRect(stampX, stampY, 300, 180);
-        rCtx.strokeStyle = '#d9534f';
-        rCtx.lineWidth = 3;
-        rCtx.strokeRect(stampX, stampY, 300, 180);
-
-        rCtx.fillStyle = '#d9534f';
-        rCtx.font = 'bold 16px sans-serif';
-        rCtx.fillText('☑ CONFIRMED & SIGNED', stampX + 15, stampY + 30);
-
-        const dateStr = `${yearSelect.value}/${monthSelect.value}/${daySelect.value}`;
-        rCtx.fillStyle = '#333333';
-        rCtx.font = '14px sans-serif';
-        rCtx.fillText(`Date: ${dateStr}`, stampX + 15, stampY + 55);
-
-        // 手書きサインの読み込みと描画
-        const sigImg = new Image();
-        sigImg.src = sigCanvas.toDataURL('image/png');
-        await new Promise((resolve) => { sigImg.onload = resolve; });
-        rCtx.drawImage(sigImg, stampX + 15, stampY + 65, 270, 100);
-
-        // 2. pdf-lib で原本PDFを読み込んで最終ページへ追加
-        const pdfDocLib = await PDFLib.PDFDocument.load(originalPdfBuffer.slice(0));
-        
-        const reportImageBytes = reportCanvas.toDataURL('image/png');
-        const embeddedReportImg = await pdfDocLib.embedPng(reportImageBytes);
-
-        const newPage = pdfDocLib.addPage([595.28, 841.89]); // A4サイズ
-        newPage.drawImage(embeddedReportImg, {
-          x: 0,
-          y: 0,
-          width: 595.28,
-          height: 841.89,
-        });
-
-        // 3. ファイルのダウンロード処理
-        const modifiedPdfBytes = await pdfDocLib.save();
-        const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
-
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `契約書_全翻訳一覧・署名完了_${yearSelect.value}${monthSelect.value}${daySelect.value}.pdf`;
-        link.click();
-
-        sigModal.style.display = 'none';
-        alert('最終ページの後に全翻訳一覧と署名が結合された新しいPDFを保存しました。');
-
-      } catch (err) {
-        console.error('PDF結合エラー詳細:', err);
-        alert('PDFへの結合処理中にエラーが発生しました。ブラウザのコンソール（F12）をご確認ください。');
-      } finally {
-        sigSaveBtn.disabled = false;
-        sigSaveBtn.textContent = '最終頁の後に一覧を結合して保存';
-      }
-    });
-  </script>
-</body>
-</html>
